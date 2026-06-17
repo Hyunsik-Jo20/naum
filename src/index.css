@@ -1555,6 +1555,7 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
 .admin-name.strike { text-decoration: line-through; color: var(--text-3); }
 .admin-sub { font-size: 11px; color: var(--text-3); }
 .admin-tag { font-size: 10px; font-weight: 700; color: #fff; background: var(--success); border-radius: 4px; padding: 0 5px; }
+.admin-tag.temp { background: var(--warning); }
 .admin-row-act { display: flex; gap: 2px; flex-shrink: 0; }
 .icon-btn {
   display: inline-flex;

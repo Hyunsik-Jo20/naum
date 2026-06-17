@@ -1,9 +1,11 @@
 // 학교 명부 설정 스토어 — 매년 폐교/증설/정보변경을 반영.
 // 기본 명부(eduSchools, 부산 642교)에 localStorage CRUD 오버레이를 병합해 유효 명부를 제공.
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { eduSchools, makeEduSchool, type EduSchool, type NewSchoolInput } from '../data/eduMock'
+import { supabase, SUPABASE_ENABLED } from '../data/supabaseClient'
 
 const LS_KEY = 'naum.schools'
+const APP_STATE_KEY = 'schools.overlay'
 
 interface Overlay {
   added: EduSchool[] // 사용자 증설
@@ -28,6 +30,16 @@ function save(o: Overlay) {
     localStorage.setItem(LS_KEY, JSON.stringify(o))
   } catch {
     /* ignore */
+  }
+}
+
+// 오버레이 영속: 클라우드 모드면 Supabase app_state(모든 기기 공유), 아니면 localStorage.
+function persistOverlay(o: Overlay) {
+  if (SUPABASE_ENABLED && supabase) {
+    void supabase.from('app_state').upsert({ key: APP_STATE_KEY, value: o, updated_at: new Date().toISOString() })
+    save(o) // 로컬 캐시(오프라인/즉시 복원)
+  } else {
+    save(o)
   }
 }
 
@@ -58,10 +70,28 @@ const Ctx = createContext<SchoolsCtx | null>(null)
 export function SchoolsProvider({ children }: { children: ReactNode }) {
   const [overlay, setOverlay] = useState<Overlay>(() => load())
 
+  // 클라우드 모드: 공유 오버레이를 Supabase에서 불러와 모든 기기에서 동일하게.
+  useEffect(() => {
+    if (!SUPABASE_ENABLED || !supabase) return
+    let ok = true
+    supabase
+      .from('app_state')
+      .select('value')
+      .eq('key', APP_STATE_KEY)
+      .maybeSingle()
+      .then(({ data }) => {
+        const v = data?.value as Overlay | undefined
+        if (ok && v) setOverlay({ added: v.added ?? [], removed: v.removed ?? [], edited: v.edited ?? {} })
+      })
+    return () => {
+      ok = false
+    }
+  }, [])
+
   const mutate = useCallback((fn: (o: Overlay) => Overlay) => {
     setOverlay((prev) => {
       const next = fn(prev)
-      save(next)
+      persistOverlay(next)
       return next
     })
   }, [])

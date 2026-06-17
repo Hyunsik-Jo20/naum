@@ -13,12 +13,13 @@ type FormState = {
   lon: string
   tel: string
   enroll: string
+  temp: boolean
 }
 
 const BUSAN_CENTER = { lat: 35.18, lon: 129.07 }
 
 function emptyForm(): FormState {
-  return { id: '', name: '', region: EDU_REGIONS[0], office: EDU_OFFICES[0], level: '초', lat: '', lon: '', tel: '', enroll: '' }
+  return { id: '', name: '', region: EDU_REGIONS[0], office: EDU_OFFICES[0], level: '초', lat: '', lon: '', tel: '', enroll: '', temp: true }
 }
 
 export default function SchoolAdminPanel() {
@@ -67,6 +68,7 @@ export default function SchoolAdminPanel() {
       lon: String(s.lon),
       tel: s.tel ?? '',
       enroll: String(s.enroll),
+      temp: s.temp ?? false,
     })
     setShowMap(false)
     setErr('')
@@ -87,10 +89,10 @@ export default function SchoolAdminPanel() {
     const enroll = form.enroll ? Number(form.enroll) : undefined
     const tel = form.tel.trim()
     if (editingId) {
-      updateSchool(editingId, { name: form.name.trim(), region: form.region, office: form.office, level: form.level, lat, lon, tel, enroll })
+      updateSchool(editingId, { name: form.name.trim(), region: form.region, office: form.office, level: form.level, lat, lon, tel, enroll, temp: form.temp })
     } else {
       const id = `u${Date.now().toString(36)}`
-      addSchool({ id, name: form.name.trim(), region: form.region, office: form.office, level: form.level, lat, lon, tel, enroll })
+      addSchool({ id, name: form.name.trim(), region: form.region, office: form.office, level: form.level, lat, lon, tel, enroll, temp: form.temp })
     }
     setShowForm(false)
     setEditingId(null)
@@ -99,7 +101,7 @@ export default function SchoolAdminPanel() {
   return (
     <div className="admin-panel">
       <p className="rail-desc">
-        매년 폐교·증설·정보 변경을 반영합니다. 변경은 이 브라우저에 저장되고 대시보드(지도·집계)에 즉시 적용됩니다.
+        매년 폐교·증설·정보 변경을 반영합니다. 변경은 <b>플랫폼에 영구 저장</b>되어 모든 기기에서 동일하게 보입니다. 추가한 학교는 <b>임시</b>로 표시됩니다.
       </p>
 
       <div className="admin-stats">
@@ -156,6 +158,10 @@ export default function SchoolAdminPanel() {
             전화번호
             <input value={form.tel} onChange={(e) => setForm({ ...form, tel: e.target.value })} placeholder="051-000-0000" inputMode="tel" />
           </label>
+          <label className="row" style={{ gap: 8, fontSize: 13, color: 'var(--text-2)', margin: '2px 0 6px', cursor: 'pointer' }}>
+            <input type="checkbox" checked={form.temp} onChange={(e) => setForm({ ...form, temp: e.target.checked })} />
+            임시 학교 (연수·테스트용 — 실제 학교 아님)
+          </label>
 
           <div className="admin-coord-head">
             <span>위치(좌표)</span>
@@ -203,7 +209,8 @@ export default function SchoolAdminPanel() {
               <div className="admin-row-main">
                 <span className="admin-name">
                   {s.name}
-                  {isCustom(s.id) && <span className="admin-tag">증설</span>}
+                  {s.temp && <span className="admin-tag temp">임시</span>}
+                  {isCustom(s.id) && !s.temp && <span className="admin-tag">증설</span>}
                 </span>
                 <span className="admin-sub">
                   {s.region} · {s.level} · 재학 {s.enroll}명

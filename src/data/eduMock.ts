@@ -17,6 +17,7 @@ export interface EduSchool {
   base: number[] // 평소(baseline) 계통별 주간 기대치 (len 12) — cat/base로 증가배수 산출
   enroll: number // 재학생 수 — 율(per-1000) 정규화용. 데모 합성
   anomaly?: string
+  temp?: boolean // 임시 학교(사용자가 추가한 연수/테스트용 — 실제 학교 아님)
 }
 
 export const EDU_REGIONS = BUSAN_REGIONS
@@ -96,6 +97,7 @@ export interface NewSchoolInput {
   lon: number
   tel?: string
   enroll?: number
+  temp?: boolean
 }
 
 export function makeEduSchool(input: NewSchoolInput): EduSchool {
@@ -113,5 +115,6 @@ export function makeEduSchool(input: NewSchoolInput): EduSchool {
     enroll: input.enroll && input.enroll > 0 ? input.enroll : Math.max(80, synthEnroll(input.level, seed)),
     cat: base.slice(),
     base,
+    temp: input.temp,
   }
 }
