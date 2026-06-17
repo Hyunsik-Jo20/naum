@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   classes,
@@ -303,6 +303,12 @@ function DoneStep({
     .map((id) => symptomTiles.find((t) => t.id === id)?.label)
     .filter(Boolean)
     .join(' · ')
+
+  // 3초 후 자동으로 처음 화면으로 복귀(다음 학생 대기).
+  useEffect(() => {
+    const t = setTimeout(onReset, 3000)
+    return () => clearTimeout(t)
+  }, [onReset])
 
   return (
     <div className="kiosk-card">
