@@ -1,6 +1,6 @@
-// 공공데이터포털(data.go.kr) 프록시 — 단일 catch-all 서버리스 함수(self-contained).
-//  /api/<svc>/<endpoint>?params → data.go.kr 대응 서비스로 중계, serviceKey를 서버측 주입.
-//  개발 환경의 vite.config 프록시와 동일 역할(브라우저에 키 미노출).
+// 공공데이터포털(data.go.kr) 프록시 — 평범한 단일 함수(브래킷 catch-all 회피).
+//  vercel.json 의 rewrite 가 /api/<svc>/<endpoint> → /api/proxy?svc=&endpoint= 로 보냄.
+//  serviceKey(서버 전용)를 주입하고 원본 쿼리는 그대로 전달. (개발 vite 프록시와 동일 역할)
 const TARGETS = {
   kma: 'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0',
   kmawrn: 'https://apis.data.go.kr/1360000/WthrWrnInfoService',
@@ -11,15 +11,12 @@ const TARGETS = {
 
 export default async function handler(req, res) {
   const key = process.env.DATAGOKR_KEY || ''
-  const { path = [], ...q } = req.query || {}
-  const segs = Array.isArray(path) ? path : [path]
-  const svc = segs[0]
+  const { svc, endpoint, ...q } = req.query || {}
   const base = TARGETS[svc]
-  if (!base) {
-    res.status(404).json({ error: 'unknown service', svc })
+  if (!base || !endpoint) {
+    res.status(404).json({ error: 'unknown service/endpoint', svc, endpoint })
     return
   }
-  const sub = segs.slice(1).join('/')
 
   // serviceKey는 Encoding 키(이미 URL-encoded)라 재인코딩 없이 그대로 덧붙인다.
   const params = new URLSearchParams()
@@ -27,7 +24,7 @@ export default async function handler(req, res) {
     if (Array.isArray(v)) v.forEach((x) => params.append(k, x))
     else if (v != null) params.set(k, String(v))
   }
-  let url = `${base}/${sub}`
+  let url = `${base}/${endpoint}`
   const qs = params.toString()
   if (qs) url += `?${qs}`
   url += (url.includes('?') ? '&' : '?') + 'serviceKey=' + key

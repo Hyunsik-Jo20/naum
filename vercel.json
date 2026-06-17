@@ -4,6 +4,7 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
+    { "source": "/api/:svc/:endpoint", "destination": "/api/proxy?svc=:svc&endpoint=:endpoint" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
