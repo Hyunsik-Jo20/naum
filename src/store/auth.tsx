@@ -21,6 +21,24 @@ export interface Session {
 }
 
 const LS_KEY = 'naum.session'
+// 오프라인 세션 캐시(supabase 모드) — 인터넷 없이도 로그인 상태 유지(콘솔/키오스크 사용).
+const LS_SESSION_CACHE = 'naum.session.cache'
+function cacheSession(s: Session | null) {
+  try {
+    if (s) localStorage.setItem(LS_SESSION_CACHE, JSON.stringify(s))
+    else localStorage.removeItem(LS_SESSION_CACHE)
+  } catch {
+    /* ignore */
+  }
+}
+function loadCachedSession(): Session | null {
+  try {
+    const o = JSON.parse(localStorage.getItem(LS_SESSION_CACHE) || 'null')
+    return o && o.role ? (o as Session) : null
+  } catch {
+    return null
+  }
+}
 
 function load(): Session | null {
   try {
@@ -93,16 +111,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let ok = true
     supabase.auth.getSession().then(async ({ data }) => {
       const uid = data.session?.user.id
-      const s = uid ? await loadProfileSession(uid) : null
+      // 온라인이면 프로필 조회, 오프라인/조회 실패 시 캐시된 세션으로 복원(오프라인 사용).
+      let s = uid ? await loadProfileSession(uid) : null
+      if (!s && uid) s = loadCachedSession()
       if (ok) {
         setSession(s)
+        cacheSession(s)
         setAuthLoading(false)
       }
     })
     const { data: sub } = supabase.auth.onAuthStateChange(async (_e, sess) => {
-      const s = sess?.user ? await loadProfileSession(sess.user.id) : null
+      let s = sess?.user ? await loadProfileSession(sess.user.id) : null
+      if (!s && sess?.user) s = loadCachedSession()
       if (ok) {
         setSession(s)
+        cacheSession(s)
         setAuthLoading(false)
       }
     })
@@ -126,6 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const s = data.user ? await loadProfileSession(data.user.id) : null
         if (!s) return '계정에 역할(프로필)이 설정되어 있지 않습니다. 관리자에게 문의하세요.'
         setSession(s)
+        cacheSession(s) // 오프라인 복원용
         return null
       },
       // 데모: PIN 1234
@@ -162,6 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout: () => {
         if (SUPABASE_ENABLED && supabase) {
           void supabase.auth.signOut()
+          cacheSession(null)
           setSession(null)
         } else {
           persist(null)

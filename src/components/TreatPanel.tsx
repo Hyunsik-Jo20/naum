@@ -9,6 +9,8 @@ import {
   tileById,
 } from '../data/mock'
 import { loadTreatments, saveTreatments } from '../data/treatments'
+import { aiTriage, aiConfigured } from '../data/aiTriage'
+import AiSettingsModal from './AiSettingsModal'
 import { useVisits } from '../store/visits'
 import type { Disease, Outcome, Visit } from '../types'
 
@@ -63,6 +65,12 @@ export default function TreatPanel({
   const [newTreat, setNewTreat] = useState('')
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [memo, setMemo] = useState('')
+  // AI 추천 상태
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiErr, setAiErr] = useState('')
+  const [aiAlert, setAiAlert] = useState<string | null>(null)
+  const [aiTreats, setAiTreats] = useState<string[]>([])
+  const [aiSettingsOpen, setAiSettingsOpen] = useState(false)
   const [outcome, setOutcome] = useState<Outcome>(visit.outcome ?? '교실 복귀')
   const [escort, setEscort] = useState<string[]>(visit.escort ?? ['보건교사'])
   const [transport, setTransport] = useState<'자가' | '119'>(visit.transport ?? '119')
@@ -116,6 +124,50 @@ export default function TreatPanel({
   }
   function toggleEscort(e: string) {
     setEscort((p) => (p.includes(e) ? p.filter((x) => x !== e) : [...p, e]))
+  }
+
+  // AI: 증상 → 병명·감염병 경고·기본 처치 추천 (증상만 전송, PII 미포함)
+  async function runAi() {
+    if (!aiConfigured()) {
+      setAiErr('')
+      setAiSettingsOpen(true)
+      return
+    }
+    setAiErr('')
+    setAiBusy(true)
+    try {
+      const syms = visit.symptomTileIds.map((id) => tileById(id)?.label).filter(Boolean) as string[]
+      const r = await aiTriage(syms, visit.grade, visit.sex)
+      if (r.diseases.length) {
+        setDiseases(r.diseases.map((d, i) => ({ name: d.name, category: d.category, isPrimary: i === 0 })))
+      }
+      setAiAlert(r.infectionAlert)
+      setAiTreats(r.treatments)
+    } catch (e) {
+      setAiErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setAiBusy(false)
+    }
+  }
+  // AI가 추천한 처치를 선택 → 반영
+  function applyAiTreat(t: string) {
+    if (!treatments.includes(t)) setTreatments((p) => [...p, t])
+    setAiTreats((p) => p.filter((x) => x !== t))
+    if (!treatOrder.includes(t)) {
+      const next = [...treatOrder]
+      const etc = next.indexOf('기타')
+      if (etc >= 0) next.splice(etc, 0, t)
+      else next.push(t)
+      setTreatOrder(next)
+      saveTreatments(next)
+    }
+  }
+  // 기타란 Enter → 직접 입력 내용을 처치로 반영
+  function addMemoAsTreat() {
+    const t = memo.trim()
+    if (!t) return
+    if (!treatments.includes(t)) setTreatments((p) => [...p, t])
+    setMemo('')
   }
 
   function buildPatch(): Partial<Visit> {
@@ -200,10 +252,24 @@ export default function TreatPanel({
         <div className="sec-label">
           병명 확정 <span className="muted-inline">· 계통 자동 분류 · 추천(확인 필요)</span>
         </div>
-        <button className="btn ghost small" onClick={addDisease}>
-          <i className="ti ti-plus" aria-hidden="true" /> 병명 추가
-        </button>
+        <div className="row" style={{ gap: 6 }}>
+          <button className="btn small" onClick={runAi} disabled={aiBusy} title="증상으로 병명·처치 AI 추천">
+            <i className={`ti ${aiBusy ? 'ti-loader-2' : 'ti-robot'}`} aria-hidden="true" /> {aiBusy ? '분석 중…' : 'AI 추천'}
+          </button>
+          <button className="btn ghost small" onClick={() => setAiSettingsOpen(true)} title="AI 설정(키)">
+            <i className="ti ti-settings" aria-hidden="true" />
+          </button>
+          <button className="btn ghost small" onClick={addDisease}>
+            <i className="ti ti-plus" aria-hidden="true" /> 병명 추가
+          </button>
+        </div>
       </div>
+      {aiErr && <div className="ai-err" style={{ marginBottom: 10 }}>{aiErr}</div>}
+      {aiAlert && (
+        <div className="infection-alert" style={{ marginBottom: 10 }}>
+          <i className="ti ti-virus" aria-hidden="true" /> <b>감염병 의심</b> · {aiAlert}
+        </div>
+      )}
       <div className="disease-list" style={{ marginBottom: 12 }}>
         {diseases.length === 0 && <div className="col-empty">병명을 추가하세요.</div>}
         {diseases.map((d, i) => (
@@ -282,11 +348,24 @@ export default function TreatPanel({
           <button className="btn ghost small" onClick={() => { setAddingTreat(false); setNewTreat('') }}>취소</button>
         </div>
       )}
+      {aiTreats.length > 0 && (
+        <div className="ai-treats" style={{ marginBottom: 8 }}>
+          <span className="muted-inline"><i className="ti ti-robot" aria-hidden="true" /> AI 추천 처치 — 누르면 반영</span>
+          <div className="chips" style={{ marginTop: 6 }}>
+            {aiTreats.map((t) => (
+              <button key={t} className="chip" onClick={() => applyAiTreat(t)}>
+                <i className="ti ti-plus" aria-hidden="true" /> {t}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <input
         className="memo"
         value={memo}
-        placeholder="기타 — 추가 처치·특이사항 직접 입력 (예: 구토 없음, 아침 식사 함)"
+        placeholder="기타 — 추가 처치·특이사항 직접 입력 후 Enter (예: 구토 없음, 아침 식사 함)"
         onChange={(e) => setMemo(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && addMemoAsTreat()}
         style={{ marginBottom: 12 }}
       />
 
@@ -356,6 +435,7 @@ export default function TreatPanel({
           </button>
         )}
       </div>
+      {aiSettingsOpen && <AiSettingsModal onClose={() => setAiSettingsOpen(false)} />}
     </div>
   )
 }

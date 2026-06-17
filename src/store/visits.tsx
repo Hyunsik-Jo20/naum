@@ -14,7 +14,7 @@ import {
 import { SUPABASE_ENABLED } from '../data/supabaseClient'
 import { loadLinks as loadLocalLinks } from '../data/localStation'
 import * as sb from '../api/supabaseBackend'
-import * as relay from '../api/supabaseRelay'
+import * as offline from '../data/offline'
 import { tileById } from '../data/mock'
 
 /**
@@ -50,6 +50,24 @@ let counter = 100
 
 interface Store { visits: Visit[]; links: Record<string, string> }
 let SEED: Store | null = null
+
+// 오프라인 캐시(supabase 모드) — 인터넷 없이도 콘솔/키오스크가 마지막 상태 + 로컬 신규를 보여줌.
+const LS_CACHE = 'naum.cache.visits'
+function loadCache(): Store | null {
+  try {
+    const o = JSON.parse(localStorage.getItem(LS_CACHE) || 'null')
+    return o && Array.isArray(o.visits) ? o : null
+  } catch {
+    return null
+  }
+}
+function saveCache(s: Store) {
+  try {
+    localStorage.setItem(LS_CACHE, JSON.stringify(s))
+  } catch {
+    /* ignore */
+  }
+}
 
 function buildSeed(): Store {
   const now = Date.now()
@@ -143,13 +161,26 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
     let cancelled = false
     ;(async () => {
       // 1) 클라우드(Supabase) 모드 — 비식별 방문은 클라우드, 링크는 로컬 스테이션.
-      //    실데이터 플랫폼이므로 데모 시드는 넣지 않는다(빈 상태로 시작).
+      //    오프라인 대비: 캐시를 먼저 띄우고(즉시 사용), 온라인이면 클라우드와 병합. 밀린 쓰기는 자동 업로드.
       if (SUPABASE_ENABLED) {
-        const [visits, cloudLinks] = await Promise.all([sb.fetchVisits(), sb.fetchLinks()])
-        // 로컬 평문 링크(같은 기기) + 클라우드 암호화 링크 복호화분(다른 기기)을 합침.
-        const links = { ...loadLocalLinks(), ...cloudLinks }
-        if (cancelled) return
-        setStore({ visits, links })
+        offline.initAutoFlush()
+        const cached = loadCache()
+        if (cached) {
+          setStore(cached)
+          setMode('supabase')
+        }
+        if (offline.isOnline()) {
+          const [visits, cloudLinks] = await Promise.all([sb.fetchVisits(), sb.fetchLinks()])
+          if (cancelled) return
+          const base = cached ?? { visits: [], links: {} }
+          // 클라우드 방문을 캐시 위에 upsert(오프라인에서 만든 로컬 전용 방문 보존).
+          const m = new Map(base.visits.map((v) => [v.id, v]))
+          visits.forEach((v) => m.set(v.id, v))
+          const links = { ...base.links, ...loadLocalLinks(), ...cloudLinks }
+          setStore({ visits: [...m.values()], links })
+        } else if (!cached) {
+          setStore({ visits: [], links: loadLocalLinks() })
+        }
         setMode('supabase')
         return
       }
@@ -192,6 +223,11 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
       offL()
     }
   }, [mode])
+
+  // [supabase] 상태가 바뀔 때마다 오프라인 캐시에 저장.
+  useEffect(() => {
+    if (mode === 'supabase') saveCache(store)
+  }, [store, mode])
 
   // [backend] SSE 구독 — 중앙(비식별 방문)·스테이션(링크) 실시간 반영.
   useEffect(() => {
@@ -264,11 +300,11 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
         setStore((p) => ({ visits: [...p.visits, v], links: { ...p.links, [id]: student.id } }))
         // 원격 반영(실패해도 화면은 유지). supabase=클라우드, backend=스테이션 경유. 둘 다 비식별 visit만.
         if (modeRef.current === 'supabase') {
-          void sb.createVisit(v, student.id)
-          // 교사·학부모 알림(접수) — 토큰+암호문만 클라우드 relay로.
+          // 온라인이면 즉시, 오프라인이면 큐에 쌓아 재연결 시 업로드.
           const sym = symptomTileIds.map((tid) => tileById(tid)?.label).filter(Boolean).join(' · ')
-          void relay.emitClass(student.grade, student.classNo, student.id, { kind: '접수', sym }, v.createdAt)
-          void relay.emitStudent(student.id, { kind: '접수', sym }, v.createdAt)
+          offline.run({ type: 'createVisit', visit: v, studentId: student.id })
+          offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: { kind: '접수', sym }, ts: v.createdAt })
+          offline.run({ type: 'emitStudent', studentId: student.id, payload: { kind: '접수', sym }, ts: v.createdAt })
         } else if (modeRef.current === 'backend') void apiCreateVisit(v, student.id)
         return v
       },
@@ -281,12 +317,12 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
           ),
         }))
         const patch = { status: 'treating' as const, calledAt }
-        if (modeRef.current === 'supabase') void sb.patchVisit(id, patch)
+        if (modeRef.current === 'supabase') offline.run({ type: 'patchVisit', id, patch })
         else if (modeRef.current === 'backend') void apiPatchVisit(id, patch)
       },
       updateVisit: (id, patch) => {
         setStore((p) => ({ ...p, visits: p.visits.map((v) => (v.id === id ? { ...v, ...patch } : v)) }))
-        if (modeRef.current === 'supabase') void sb.patchVisit(id, patch)
+        if (modeRef.current === 'supabase') offline.run({ type: 'patchVisit', id, patch })
         else if (modeRef.current === 'backend') void apiPatchVisit(id, patch)
       },
       completeVisit: (id, patch) => {
@@ -299,13 +335,22 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
         }))
         const full = { ...patch, status: 'done' as const, treatedAt }
         if (modeRef.current === 'supabase') {
-          void sb.patchVisit(id, full)
+          offline.run({ type: 'patchVisit', id, patch: full })
           const sid = store.links[id]
           const student = sid ? findStudent(sid) : undefined
           if (student) {
-            const p = { kind: '종료' as const, outcome: (patch.outcome as string) ?? '교실 복귀' }
-            void relay.emitClass(student.grade, student.classNo, student.id, p, treatedAt)
-            void relay.emitStudent(student.id, p, treatedAt)
+            const cur = store.visits.find((v) => v.id === id)
+            const prim = (patch.diseases ?? []).find((d) => d.isPrimary) ?? (patch.diseases ?? [])[0]
+            const sym = cur?.symptomTileIds.map((t) => tileById(t)?.label).filter(Boolean).join(' · ')
+            const p = {
+              kind: '종료' as const,
+              outcome: (patch.outcome as string) ?? '교실 복귀',
+              disease: prim?.name,
+              treatments: patch.treatments,
+              sym,
+            }
+            offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: p, ts: treatedAt })
+            offline.run({ type: 'emitStudent', studentId: student.id, payload: p, ts: treatedAt })
           }
         } else if (modeRef.current === 'backend') void apiPatchVisit(id, full)
       },

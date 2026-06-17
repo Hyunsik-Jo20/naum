@@ -1008,6 +1008,27 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
 .wx-badge.warning { background: var(--warning-bg); color: var(--warning); }
 .wx-badge.danger { background: var(--danger-bg); color: var(--danger); }
 .wx-badge.muted { background: var(--surface-2); color: var(--text-3); }
+/* 동기화 상태 칩(오프라인/업로드 대기) */
+.sync-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  padding: 3px 9px; border-radius: 999px;
+}
+.sync-chip.off { background: var(--warning-bg); color: var(--warning); }
+.sync-chip.up { background: var(--info-bg); color: var(--info); }
+.sync-go {
+  margin-left: 4px; border: none; background: var(--info); color: #fff;
+  font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; cursor: pointer;
+}
+/* AI 감염병 의심 경고 배너 */
+.infection-alert {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-radius: var(--border-radius-md);
+  background: var(--danger-bg); color: var(--danger);
+  font-size: 13px; font-weight: 600; line-height: 1.5;
+  border: 1px solid var(--danger);
+}
+.ai-treats .muted-inline { font-size: 12px; }
 /* 보호 라우트 로딩(클라우드 세션 복원 중) */
 .route-loading { padding: 48px 16px; text-align: center; color: var(--text-3); font-size: 14px; }
 /* 상단바 컴팩트 날씨: 등급 배지를 작게 */

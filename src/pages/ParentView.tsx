@@ -8,6 +8,7 @@ import { loadStudentInbox } from '../data/relay'
 import { decryptJson, getStudentKey } from '../data/e2e'
 import { SUPABASE_ENABLED } from '../data/supabaseClient'
 import * as cloudRelay from '../api/supabaseRelay'
+import { buildParentMessage } from '../data/notifyText'
 
 function clock(ts: number) {
   const d = new Date(ts)
@@ -87,12 +88,8 @@ export default function ParentView() {
                   <i className="ti ti-bell" aria-hidden="true" /> 보건실 {done ? '처치 종료' : '접수'}
                   <span className="pm-time">{clock(e.ts)}</span>
                 </div>
-                <div className="pm-body">
-                  {!p
-                    ? '(복호화 실패)'
-                    : done
-                      ? `처치가 끝났습니다. 결과: ${p.outcome}.`
-                      : `보건실에 접수되었습니다. 증상: ${p.sym || '확인 중'}. 처치 후 다시 안내드립니다.`}
+                <div className="pm-body" style={{ whiteSpace: 'pre-line' }}>
+                  {!p ? '(복호화 실패)' : buildParentMessage(p, child?.name)}
                 </div>
               </div>
             )

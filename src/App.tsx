@@ -14,6 +14,7 @@ const ParentRouting = lazy(() => import('./pages/ParentRouting'))
 const TeacherView = lazy(() => import('./pages/TeacherView'))
 const ParentView = lazy(() => import('./pages/ParentView'))
 import QuickNoticeModal from './components/QuickNoticeModal'
+import SyncStatus from './components/SyncStatus'
 import AutoNoticeSettings from './components/AutoNoticeSettings'
 import HeaderWeather from './components/HeaderWeather'
 import { useNotices } from './store/notices'
@@ -60,6 +61,7 @@ export default function App() {
             </button>
           )}
           {isWide ? <HeaderWeather /> : <span className="spacer" />}
+          <SyncStatus />
           {session && (
             <span className="user-chip" title={session.org}>
               <i

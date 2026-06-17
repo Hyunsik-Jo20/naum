@@ -8,6 +8,7 @@ import { decryptJson, getClassKey } from '../data/e2e'
 import { SUPABASE_ENABLED } from '../data/supabaseClient'
 import { students as allStudents } from '../data/mock'
 import * as cloudRelay from '../api/supabaseRelay'
+import { buildTeacherLine } from '../data/notifyText'
 
 function clock(ts: number) {
   const d = new Date(ts)
@@ -108,7 +109,7 @@ export default function TeacherView() {
                     <span className="muted-inline">{who ? `${who.number}번` : ''}</span>
                   </div>
                   <div className="evt-sym">
-                    {!p ? '(복호화 실패)' : done ? `처치 종료 · ${p.outcome}` : `접수 · ${p.sym || '증상 확인 중'}`}
+                    {!p ? '(복호화 실패)' : buildTeacherLine(p)}
                   </div>
                 </div>
                 <div className="evt-side">
