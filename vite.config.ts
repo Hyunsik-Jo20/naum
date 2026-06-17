@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 
 // data.go.kr(기상청·에어코리아)은 CORS 미허용 + 키 필요 →
 // 개발 서버 프록시로 우회하고 serviceKey를 서버측에서 주입(브라우저 노출 방지).
@@ -10,7 +11,42 @@ export default defineConfig(({ mode }) => {
     path + (path.includes('?') ? '&' : '?') + 'serviceKey=' + key
 
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      // PWA — 앱 셸을 서비스워커로 캐시해 설치형(APK처럼) + 오프라인 실행.
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: ['icon.svg'],
+        manifest: {
+          name: '나음 — 보건실 디지털 전환 플랫폼',
+          short_name: '나음',
+          description: '학생 셀프 접수·처치·알림. 오프라인에서도 동작하는 보건실 플랫폼.',
+          lang: 'ko',
+          theme_color: '#1d4ed8',
+          background_color: '#ffffff',
+          display: 'standalone',
+          start_url: '/',
+          scope: '/',
+          icons: [
+            { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+            { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+          ],
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,svg,woff2,woff,ttf}'],
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/api\//],
+          runtimeCaching: [
+            {
+              // Tabler 아이콘 폰트/CSS(CDN) — 첫 방문 후 오프라인에서도 아이콘 표시.
+              urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/.*/,
+              handler: 'CacheFirst',
+              options: { cacheName: 'cdn-jsdelivr', expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 30 } },
+            },
+          ],
+        },
+      }),
+    ],
     server: {
       port: 5173,
       proxy: {

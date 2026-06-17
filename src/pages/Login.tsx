@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth, type Role } from '../store/auth'
 import { SCHOOL } from '../data/location'
 import { classes } from '../data/mock'
+import InstallButton from '../components/InstallButton'
 
 const roleHome = (r: Role) => (r === 'edu' ? '/edu' : r === 'teacher' ? '/teacher' : r === 'parent' ? '/parent' : '/')
 
@@ -116,6 +117,7 @@ export default function Login() {
             역할(보건교사·교사·학부모·교육청)은 계정에 따라 자동 적용됩니다. 데모 계정 비번 <b>{DEMO_PW}</b>.
             <br />학생 키오스크는 로그인 없이 사용합니다.
           </p>
+          <div style={{ marginTop: 12, textAlign: 'center' }}><InstallButton /></div>
         </div>
       </div>
     )
@@ -193,6 +195,7 @@ export default function Login() {
           보건교사·교사·학부모는 학생 알림(로컬), 교육청은 비식별 집계 대시보드에 접근합니다.
           교사는 자기 반, 학부모는 자기 자녀 알림만 봅니다. 학생 키오스크는 로그인 없이 사용합니다.
         </p>
+        <div style={{ marginTop: 12, textAlign: 'center' }}><InstallButton /></div>
       </div>
     </div>
   )

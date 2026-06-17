@@ -6,5 +6,8 @@
   "rewrites": [
     { "source": "/api/:svc/:endpoint", "destination": "/api/proxy?svc=:svc&endpoint=:endpoint" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }] }
   ]
 }

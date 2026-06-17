@@ -9,6 +9,9 @@
 학생이 키오스크로 셀프 접수 → 보건교사는 처치만 → 담임·학부모 실시간 알림 → 교육청은 비식별 집계 대시보드.
 **개인정보(이름·반·번호)는 보건실 로컬에만, 서버엔 비식별(난수토큰·학년·성별·계통·시각)만.**
 
+### 최근 추가(2026-06-17) — 설치형 PWA(오프라인 앱)
+- **PWA(설치형 웹앱)**: `vite-plugin-pwa`(Workbox). 서비스워커가 앱 셸을 precache → **APK처럼 설치(홈화면/바탕화면) + 오프라인 실행**. `manifest.webmanifest`(아이콘 `public/icon.svg`), `registerSW({immediate})` in main.tsx, autoUpdate. CDN(tabler 아이콘) runtimeCaching=CacheFirst. **"앱 설치" 버튼**(`components/InstallButton.tsx`, beforeinstallprompt) — 상단바·로그인 화면. vercel.json `sw.js` no-cache 헤더. 데이터 오프라인(아웃박스)과 합쳐 완전 오프라인.
+
 ### 최근 추가(2026-06-17) — 오프라인·AI추천·학부모문구
 - **오프라인 사용 + 재연결 일괄 업로드**(supabase 모드): `data/offline.ts` 아웃박스 큐 + `data/visits` 캐시(`naum.cache.visits`). 오프라인이면 접수·처치·알림 쓰기를 localStorage 큐에 적재, `online` 이벤트 시 자동 flush. 부팅 시 캐시 먼저 띄워 인터넷 없이도 콘솔/키오스크 동작. 세션 캐시(`naum.session.cache`)로 오프라인 로그인 유지. 상단바 `SyncStatus`(오프라인·대기건수·지금). (검증: 오프라인 접수→큐 3건→재연결 자동 업로드 0건)
 - **AI 병명·처치 추천**(`data/aiTriage.ts`, `callAi` 재사용): TreatPanel "AI 추천" — 증상만 전송(PII 미포함)→병명·계통·**감염병 의심 경고**·기본 처치 3가지(JSON). 처치 칩 선택 반영, **기타란 Enter로 직접 입력**. 키는 `AiSettingsModal`(보건교사용). 

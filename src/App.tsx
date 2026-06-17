@@ -15,6 +15,7 @@ const TeacherView = lazy(() => import('./pages/TeacherView'))
 const ParentView = lazy(() => import('./pages/ParentView'))
 import QuickNoticeModal from './components/QuickNoticeModal'
 import SyncStatus from './components/SyncStatus'
+import InstallButton from './components/InstallButton'
 import AutoNoticeSettings from './components/AutoNoticeSettings'
 import HeaderWeather from './components/HeaderWeather'
 import { useNotices } from './store/notices'
@@ -85,6 +86,7 @@ export default function App() {
               <i className="ti ti-settings" aria-hidden="true" /> 설정
             </button>
           )}
+          <InstallButton />
           {session && (
             <button className="btn ghost small" onClick={logout} title="로그아웃">
               <i className="ti ti-logout" aria-hidden="true" /> 로그아웃
