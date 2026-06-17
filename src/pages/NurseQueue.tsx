@@ -149,31 +149,33 @@ export default function NurseQueue() {
               </div>
             )}
           </div>
-          <div className="col-head warning-t">
-            <i className="ti ti-hourglass" aria-hidden="true" /> 대기 중 · {waiting.length}
-          </div>
-          <div className="col-body">
-            {waiting.length === 0 ? (
-              <div className="col-empty">대기 학생 없음</div>
-            ) : (
-              waiting.map((v) => (
-                <button
-                  key={v.id}
-                  className="visit-card warn"
-                  onClick={() => selectWaiting(v)}
-                  title="지금 처치 시작"
-                >
-                  <div className="vc-name">
-                    {nameOf(v)} <span className="vc-class">{clsOf(v)}</span>
-                  </div>
-                  <div className="vc-sym">{symptomText(v)}</div>
-                  <div className="vc-foot warning-t">{minutesSince(v.createdAt)}분 대기</div>
-                </button>
-              ))
-            )}
-            <button className="add-visit-btn" onClick={() => setShowAdd(true)}>
-              <i className="ti ti-plus" aria-hidden="true" /> 직접 접수
-            </button>
+          <div className="queue-panel waiting">
+            <div className="col-head warning-t">
+              <i className="ti ti-hourglass" aria-hidden="true" /> 대기 중 · {waiting.length}
+            </div>
+            <div className="col-body">
+              {waiting.length === 0 ? (
+                <div className="col-empty">대기 학생 없음</div>
+              ) : (
+                waiting.map((v) => (
+                  <button
+                    key={v.id}
+                    className="visit-card warn"
+                    onClick={() => selectWaiting(v)}
+                    title="지금 처치 시작"
+                  >
+                    <div className="vc-name">
+                      {nameOf(v)} <span className="vc-class">{clsOf(v)}</span>
+                    </div>
+                    <div className="vc-sym">{symptomText(v)}</div>
+                    <div className="vc-foot warning-t">{minutesSince(v.createdAt)}분 대기</div>
+                  </button>
+                ))
+              )}
+              <button className="add-visit-btn" onClick={() => setShowAdd(true)}>
+                <i className="ti ti-plus" aria-hidden="true" /> 직접 접수
+              </button>
+            </div>
           </div>
         </div>
 
@@ -213,7 +215,7 @@ export default function NurseQueue() {
         </div>
 
         {/* 우측 1/4 — 종료자 (사후 보완) */}
-        <div>
+        <div className="queue-panel done">
           <div className="col-head success-t">
             <i className="ti ti-check" aria-hidden="true" /> 완료 · {done.length}
           </div>

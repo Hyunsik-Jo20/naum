@@ -482,6 +482,12 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
   margin-bottom: 8px;
 }
 .col-body { display: flex; flex-direction: column; gap: 8px; }
+
+/* 대기자/완료자 명단 패널 — 파스텔 배경(다크모드 적응: surface에 색 틴트) */
+.queue-panel { border-radius: var(--border-radius-md, 10px); padding: 10px; }
+.queue-panel.waiting { background: color-mix(in srgb, #ff9f43 22%, var(--surface)); }
+.queue-panel.done { background: color-mix(in srgb, #4a90e2 18%, var(--surface)); }
+.queue-panel > .col-head { margin-bottom: 8px; }
 .col-empty {
   font-size: 13px;
   color: var(--text-3);
