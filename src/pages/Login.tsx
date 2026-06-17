@@ -7,7 +7,7 @@ import { classes } from '../data/mock'
 const roleHome = (r: Role) => (r === 'edu' ? '/edu' : r === 'teacher' ? '/teacher' : r === 'parent' ? '/parent' : '/')
 
 // 클라우드(supabase) 데모 계정 — 대시보드에서 동일 이메일/비번으로 생성해 두면 빠른 로그인 동작.
-const DEMO_PW = 'Demo1234!'
+const DEMO_PW = '123456'
 const DEMO_ACCOUNTS: { role: Role; label: string; icon: string; email: string }[] = [
   { role: 'nurse', label: '보건교사', icon: 'ti-stethoscope', email: 'nurse@naum.kr' },
   { role: 'teacher', label: '담임(1-1)', icon: 'ti-user', email: 'teacher@naum.kr' },
