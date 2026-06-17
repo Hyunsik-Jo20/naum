@@ -20,7 +20,7 @@
   - **다기기 이름복원(암호화 링크)**: `visit_links`에 studentId를 학교 키로 암호화 저장 → 다른 기기 콘솔도 복호화로 이름 복원(서버 복호화 불가). `data/schoolCrypto.ts`(결정적 키/토큰), `0003_links_relay.sql`.
   - **교사·학부모 알림 클라우드 연동(relay)**: 접수/종료 시 나음이 `relay_class/student_inbox`에 토큰+암호문 발신, 교사(반 키)·학부모(학생 키)가 Realtime 수신·복호화. `api/supabaseRelay.ts`, TeacherView/ParentView 클라우드 분기. **`VITE_SCHOOL_LINK_SECRET` 전 기기 동일** 필요.
   - **라우트 코드분할**: App.tsx React.lazy+Suspense(메인 번들 650→520KB, Edu 등 분리).
-  - **Git/Vercel 준비**: git init + 초기 커밋(.env.local 제외 확인). GitHub push·Vercel import는 사용자 작업.
+  - **Git/Vercel 배포 완료(2026-06-17)**: GitHub `Hyunsik-Jo20/naum` push, Vercel `https://naum-kappa.vercel.app` 라이브. 검증: SPA·딥링크 fallback·클라우드 모드(번들에 Supabase ref)·API 프록시 3종(airstn/kma/air → data.go.kr, serviceKey 서버주입) 모두 200. **API는 catch-all 대신 `api/proxy.js` + vercel.json rewrite**(`/api/:svc/:endpoint`)로 구현 — Vercel에서 브래킷 catch-all 다중세그먼트 라우팅이 안 돼 전환. 남은 건 카카오 콘솔에 `*.vercel.app` 도메인 등록(지도).
   - **실클라우드 검증 완료(2026-06-17)**: 이메일+비밀번호 로그인 → 콘솔이 클라우드 비식별 방문 조회 → 키오스크(anon) 접수 → **Realtime 즉시 반영** 확인. 수정 2건: ① 키오스크 insert는 `upsert`→`insert`(anon은 UPDATE 정책 없어 upsert가 RLS에 막힘) ② 보호 라우트 딥링크/새로고침 레이스 → `authLoading` 추가(세션 복원 중 대기). RLS 보정은 `supabase/migrations/0002_fix_policies.sql`.
   - 후속: 다기기 이름 복원(암호화 링크/온프레미스 스테이션), 교사·학부모 알림(relay) 클라우드 연동, 휴대폰 OTP.
 
