@@ -9,6 +9,7 @@ import {
   type EduSchool,
 } from '../data/eduMock'
 import WeatherBar from '../components/WeatherBar'
+import EduNurseTokenModal from '../components/EduNurseTokenModal'
 import SchoolMap, { type AirAlert } from '../components/SchoolMap'
 import type { CurrentWeather } from '../data/weatherApi'
 import { deriveAlerts, type DisasterAlert } from '../data/disasters'
@@ -53,6 +54,7 @@ export default function Edu() {
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
   const [selectedSchool, setSelectedSchool] = useState<EduSchool | null>(null)
   const [refAir, setRefAir] = useState<CurrentWeather | null>(null)
+  const [showNurseToken, setShowNurseToken] = useState(false)
   const { schools: allSchools } = useSchools()
   const { openCompose, sent, autoEvaluate, thresholds } = useNotices()
 
@@ -282,6 +284,9 @@ export default function Edu() {
           </button>
           <button className="btn small no-print" onClick={() => window.print()}>
             <i className="ti ti-printer" aria-hidden="true" /> 보고서(PDF)
+          </button>
+          <button className="btn small no-print" onClick={() => setShowNurseToken(true)} title="보건교사 회원가입 토큰 발급">
+            <i className="ti ti-id-badge-2" aria-hidden="true" /> 보건교사 가입 토큰
           </button>
         </div>
       </div>
@@ -542,6 +547,7 @@ export default function Edu() {
         </div>
       </div>
 
+      {showNurseToken && <EduNurseTokenModal onClose={() => setShowNurseToken(false)} />}
     </div>
   )
 }

@@ -60,7 +60,7 @@ function loadTokenSession(): Session | null {
   }
 }
 
-interface TokenPayload { r: 't' | 'p'; g?: number; c?: number; sid?: string; n?: string }
+interface TokenPayload { r: 't' | 'p' | 'n'; g?: number; c?: number; sid?: string; n?: string; org?: string }
 
 function load(): Session | null {
   try {
@@ -81,6 +81,11 @@ interface AuthCtx {
   loginToken: (
     token: string,
     info: { grade?: number; classNo?: number; childName?: string; name?: string },
+  ) => Promise<string | null>
+  // 보건교사 최초 회원가입 — 교육청이 발급한 가입 토큰 + 이메일/비밀번호 등록.
+  signupNurse: (
+    token: string,
+    info: { name: string; email: string; password: string },
   ) => Promise<string | null>
   // 데모(로컬) 모드 — 역할별 PIN 1234.
   loginNurse: (name: string, pin: string) => string | null
@@ -223,6 +228,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const s: Session = { role: 'parent', name: `${p.n} 보호자`, org: SCHOOL.name, childId: p.sid, childName: p.n }
         cacheTokenSession(s)
         setSession(s)
+        return null
+      },
+      // 보건교사 회원가입 — 교육청 가입 토큰 검증 후 Supabase 계정 생성(role=nurse 프로필 자동).
+      signupNurse: async (token, info) => {
+        if (!supabase) return '클라우드 인증이 설정되지 않았습니다.'
+        const p = await decodeLoginToken<TokenPayload>(token)
+        if (!p || p.r !== 'n') return '가입 토큰이 올바르지 않습니다. 교육청에서 받은 토큰을 확인하세요.'
+        if (!info.email.trim() || !info.password) return '이메일과 비밀번호를 입력하세요.'
+        if (info.password.length < 6) return '비밀번호는 6자 이상으로 설정하세요.'
+        const { error } = await supabase.auth.signUp({
+          email: info.email.trim(),
+          password: info.password,
+          options: { data: { role: 'nurse', name: info.name.trim() || '보건교사', org: p.org || SCHOOL.name } },
+        })
+        if (error) {
+          return /registered|already/i.test(error.message)
+            ? '이미 가입된 이메일입니다. 로그인하세요.'
+            : `가입 실패: ${error.message}`
+        }
         return null
       },
       // 데모: PIN 1234

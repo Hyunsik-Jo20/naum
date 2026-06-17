@@ -24,7 +24,7 @@ const TABS: { role: Role; label: string; icon: string }[] = [
 ]
 
 export default function Login() {
-  const { loginNurse, loginEdu, loginTeacher, loginParent, loginPassword, loginToken, authMode, session } = useAuth()
+  const { loginNurse, loginEdu, loginTeacher, loginParent, loginPassword, loginToken, signupNurse, authMode, session } = useAuth()
   const nav = useNavigate()
   const [tab, setTab] = useState<Role>('nurse')
   const [email, setEmail] = useState('')
@@ -39,6 +39,13 @@ export default function Login() {
   const [tkClass, setTkClass] = useState(1)
   const [tkChild, setTkChild] = useState('')
   const [tkName, setTkName] = useState('')
+  // 보건교사 회원가입
+  const [staffView, setStaffView] = useState<'login' | 'signup'>('login')
+  const [suToken, setSuToken] = useState('')
+  const [suName, setSuName] = useState('')
+  const [suEmail, setSuEmail] = useState('')
+  const [suPw, setSuPw] = useState('')
+  const [suMsg, setSuMsg] = useState('')
 
   // "로그인 상태 유지" 플래그 — OFF면 브라우저 종료 시 로그아웃(auth 부팅에서 적용).
   const applyPersist = () => {
@@ -122,6 +129,17 @@ export default function Login() {
   }
   const tkClassNos = classes.filter((c) => Number(c.split('-')[0]) === tkGrade).map((c) => Number(c.split('-')[1])).sort((a, b) => a - b)
 
+  async function submitSignup() {
+    setErr('')
+    setSuMsg('')
+    setBusy(true)
+    const e = await signupNurse(suToken, { name: suName, email: suEmail, password: suPw })
+    setBusy(false)
+    if (e) return setErr(e)
+    setSuMsg('가입 신청 완료! 입력한 이메일로 인증 메일이 발송되었습니다. 메일에서 인증 후 로그인하세요. (인증이 꺼진 경우 바로 로그인됩니다)')
+    setStaffView('login')
+  }
+
   // ── 클라우드(Supabase) 모드: 이메일 + 비밀번호 단일 폼. 역할은 계정 프로필에서 결정. ──
   if (authMode === 'supabase') {
     return (
@@ -138,7 +156,30 @@ export default function Login() {
             </button>
           </div>
 
-          {cloudMode === 'staff' ? (
+          {cloudMode === 'staff' && staffView === 'signup' ? (
+            <>
+              <div className="login-demo" style={{ margin: '0 0 8px' }}>보건교사 회원가입 (최초 1회 · 교육청 토큰 필요)</div>
+              <label className="login-field">교육청 가입 토큰
+                <textarea rows={2} value={suToken} placeholder="교육청에서 받은 가입 토큰 붙여넣기" onChange={(e) => setSuToken(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 12 }} />
+              </label>
+              <label className="login-field">이름
+                <input value={suName} placeholder="보건교사 이름" onChange={(e) => setSuName(e.target.value)} />
+              </label>
+              <label className="login-field">이메일
+                <input type="email" value={suEmail} placeholder="로그인에 쓸 이메일" onChange={(e) => setSuEmail(e.target.value)} />
+              </label>
+              <label className="login-field">비밀번호
+                <input type="password" value={suPw} placeholder="6자 이상" onChange={(e) => setSuPw(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submitSignup()} />
+              </label>
+              {err && <div className="ai-err" style={{ marginBottom: 12 }}>{err}</div>}
+              <button className="btn primary" style={{ width: '100%', justifyContent: 'center' }} disabled={busy} onClick={submitSignup}>
+                <i className="ti ti-user-plus" aria-hidden="true" /> {busy ? '처리 중…' : '회원가입'}
+              </button>
+              <button className="btn ghost small" style={{ width: '100%', justifyContent: 'center', marginTop: 8 }} onClick={() => { setStaffView('login'); setErr('') }}>
+                ← 로그인으로 돌아가기
+              </button>
+            </>
+          ) : cloudMode === 'staff' ? (
             <>
               <label className="login-field">이메일
                 <input type="email" value={email} placeholder="이메일" onChange={(e) => setEmail(e.target.value)} />
@@ -146,9 +187,13 @@ export default function Login() {
               <label className="login-field">비밀번호
                 <input type="password" value={password} placeholder="비밀번호" onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submitCloud()} />
               </label>
+              {suMsg && <div className="route-note" style={{ margin: '0 0 12px' }}>{suMsg}</div>}
               {err && <div className="ai-err" style={{ marginBottom: 12 }}>{err}</div>}
               <button className="btn primary" style={{ width: '100%', justifyContent: 'center' }} disabled={busy} onClick={submitCloud}>
                 <i className="ti ti-login" aria-hidden="true" /> {busy ? '확인 중…' : '로그인'}
+              </button>
+              <button className="btn ghost small" style={{ width: '100%', justifyContent: 'center', marginTop: 8 }} onClick={() => { setStaffView('signup'); setErr(''); setSuMsg('') }}>
+                <i className="ti ti-user-plus" aria-hidden="true" /> 보건교사 회원가입
               </button>
               <div className="login-demo" style={{ margin: '16px 0 6px' }}>데모 빠른 로그인 (역할 선택)</div>
               <div className="login-tabs grid4">
