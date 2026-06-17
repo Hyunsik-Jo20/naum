@@ -237,15 +237,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!p || p.r !== 'n') return '가입 토큰이 올바르지 않습니다. 교육청에서 받은 토큰을 확인하세요.'
         if (!info.email.trim() || !info.password) return '이메일과 비밀번호를 입력하세요.'
         if (info.password.length < 6) return '비밀번호는 6자 이상으로 설정하세요.'
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: info.email.trim(),
           password: info.password,
           options: { data: { role: 'nurse', name: info.name.trim() || '보건교사', org: p.org || SCHOOL.name } },
         })
         if (error) {
           return /registered|already/i.test(error.message)
-            ? '이미 가입된 이메일입니다. 로그인하세요.'
+            ? '이미 가입된 이메일입니다. 기존 비밀번호로 로그인하세요.'
             : `가입 실패: ${error.message}`
+        }
+        // Supabase: 이미 가입된 이메일이면 error 없이 identities=[] 로 응답(이메일 존재 노출 방지).
+        //  → "가입 성공"으로 오해하지 않도록 명확히 안내(비밀번호는 바뀌지 않음).
+        if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+          return '이미 가입된 이메일입니다. 기존 비밀번호로 로그인하세요. (비밀번호 변경은 관리자/비밀번호 재설정으로)'
         }
         return null
       },
