@@ -20,9 +20,10 @@
    - `anon public` key → `VITE_SUPABASE_ANON_KEY`
 
 ## 2. 스키마 생성
-1. 대시보드 **SQL Editor → New query**.
-2. `supabase/migrations/0001_init.sql` 내용을 붙여넣고 **Run**.
-   - 생성: `profiles`, `visits`(비식별), `relay_*`(향후 알림용) + RLS + Realtime publication + 가입 트리거.
+대시보드 **SQL Editor → New query** 에서 아래 3개를 순서대로 각각 **Run**(모두 멱등 — 재실행 안전):
+1. `supabase/migrations/0001_init.sql` — `profiles`, `visits`(비식별), `relay_*` + RLS + Realtime + 가입 트리거.
+2. `supabase/migrations/0002_fix_policies.sql` — RLS 정책 보정(0001 부분적용 대비).
+3. `supabase/migrations/0003_links_relay.sql` — `visit_links`(암호화 링크=다기기 이름복원) + relay 발신 정책(anon 포함) + Realtime.
 
 ## 3. 계정(역할) 만들기
 로그인은 **이메일+비밀번호**, 역할은 `profiles.role` 로 결정된다.
@@ -68,6 +69,7 @@ VITE_SUPABASE_ANON_KEY=eyJ...
    | `VITE_KAKAO_JS_KEY` | 카카오 JS 키 | 클라이언트 |
    | `VITE_WEATHER_SOURCE` | `kma` (선택) | 클라이언트 |
    | `VITE_SCHOOL_ID` | 학교 식별자(선택, 기본 `demo`) | 클라이언트 |
+   | `VITE_SCHOOL_LINK_SECRET` | 학교 공유 비밀(암호화 링크·relay 키 토대). 긴 무작위 문자열, **같은 학교 전 기기 동일** | 클라이언트 |
    | `DATAGOKR_KEY` | 공공데이터포털 Encoding 키 | **서버 전용**(VITE_ 없음) |
 4. **Deploy**. 빌드 후 `https://<프로젝트>.vercel.app` 발급.
    - `/api/*` 서버리스 함수가 data.go.kr 프록시(serviceKey 서버 주입)를 담당 → 개발 Vite 프록시와 동일.
@@ -79,8 +81,13 @@ VITE_SUPABASE_ANON_KEY=eyJ...
 - [ ] Supabase `visits` 행에 이름/반/번호/studentId **없음**(비식별 확인)
 - [ ] 날씨·미세먼지·지도 정상(키/도메인 등록 확인)
 
-## 7. 알려진 한계 / 후속
-- **다기기 이름 복원**: 링크(PII)가 기기별 localStorage라, *다른 기기*의 키오스크 접수는 콘솔에서 이름이 안 풀린다. → 같은 브라우저(콘솔+키오스크 탭) 기준으로 사용하거나, 후속으로 **암호화 링크(school 키, E2E)** 또는 **온프레미스 스테이션** 도입.
-- **교사·학부모 알림(relay)**: 현재 클라우드 미연동(테이블만 준비). 다기기 알림은 `relay_*` + Realtime 연동이 후속 과제.
+## 7. 다기기 이름복원·알림(구현됨) — 키 공유 주의
+- **다기기 이름 복원(암호화 링크)**: `visit_links`에 studentId를 **학교 키로 암호화**해 저장 → 다른 기기 콘솔도 복호화로 이름 복원. 서버는 복호화 불가.
+- **교사·학부모 알림(relay)**: 접수/종료 시 나음이 `relay_*`에 **토큰+암호문** 발신, 교사(반 키)·학부모(학생 키)가 Realtime 수신·복호화.
+- ⚠️ 위 둘은 **`VITE_SCHOOL_LINK_SECRET`이 같은 학교 전 기기에 동일**해야 동작(키 파생 토대). 값이 다르면 복호화 실패로 이름/알림이 안 풀림.
+
+## 8. 알려진 한계 / 후속
+- **키 모델**: 학교 비밀이 클라이언트 번들에 포함 → "DB 유출 시 식별 불가"는 보장하나, 앱+계정 접근자는 복호화 가능. 진짜 사용자별 키 교환은 후속.
+- **교사/학부모 계정**: profiles에 `grade/class_no`(교사)·`child_id`(학부모) 지정 필요(3장 SQL 예시).
 - **휴대폰 OTP**: 지금은 비밀번호. 전환 시 `auth.tsx`의 `loginPassword` → `supabase.auth.signInWithOtp({phone})` + 검증으로 교체(폼만 변경, 나머지 구조 동일).
-- 번들 크기: supabase-js 포함으로 ~650KB. 필요 시 코드 스플리팅.
+- 번들: 라우트 코드분할 적용(메인 ~520KB, Edu 등 분리). 추가 최적화 여지 있음.
