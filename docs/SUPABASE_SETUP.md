@@ -48,6 +48,17 @@ where id = (select id from auth.users where email='parent@example.com');
 ```
 > 키오스크는 로그인이 필요 없다(공개). RLS가 anon insert만 허용.
 
+## 3-1. 데모 계정(클라우드) — 빠른 로그인 버튼과 연동
+로그인 화면의 "데모 빠른 로그인" 4버튼은 아래 계정을 사용한다(대시보드 Add user + Auto Confirm로 생성, profiles 역할 지정):
+| 이메일 | 비번 | 역할 | profiles |
+|---|---|---|---|
+| nurse@naum.kr | 123456 | 보건교사 | role=nurse |
+| teacher@naum.kr | 123456 | 담임 | role=teacher, grade=1, class_no=1 |
+| parent@naum.kr | 123456 | 학부모 | role=parent, child_id=s1_1_1(장지호) |
+| edu@naum.kr | 123456 | 교육청 | role=edu |
+> 비번/이메일 변경 시 `src/pages/Login.tsx`의 `DEMO_PW`·`DEMO_ACCOUNTS`도 맞춰야 함.
+> ⚠️ relay/암호화링크가 기기·환경 간 복호화되려면 **`VITE_SCHOOL_LINK_SECRET`이 로컬·Vercel 동일**해야 함(현재 `.env.local` 값과 Vercel 값 일치 확인).
+
 ## 4. 로컬에서 클라우드 모드 시험(선택)
 `.env.local` 에 추가 후 `npm run dev`:
 ```
