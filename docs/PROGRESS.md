@@ -9,6 +9,12 @@
 학생이 키오스크로 셀프 접수 → 보건교사는 처치만 → 담임·학부모 실시간 알림 → 교육청은 비식별 집계 대시보드.
 **개인정보(이름·반·번호)는 보건실 로컬에만, 서버엔 비식별(난수토큰·학년·성별·계통·시각)만.**
 
+### 최근 추가(2026-06-17) — 토큰 로그인(교사·학부모) + 로그인 유지
+- **교사·학부모 토큰 로그인**: 보건교사가 콘솔 "로그인 토큰 발급"(`LoginTokenModal`)로 학반(담임)·학생(학부모) 토큰 발급·배부 → 받는 사람이 로그인 화면 "교사·학부모(토큰)" 탭에서 **토큰 + 학반/자녀 이름**으로 매칭 로그인. Supabase 계정 불필요(로컬 토큰 세션 `naum.tokensession`). 토큰=학교 키 암호문(자체완결, 서버 미저장) — `schoolCrypto.issueLoginToken/decodeLoginToken`. `auth.loginToken`, 토큰세션 부팅 우선 복원.
+  - relay 수신 위해 **`0004_relay_anon_select.sql`(relay select를 anon 허용)** 실행 필요(내용은 암호문이라 노출 없음).
+- **로그인 상태 유지 체크박스**(기본 ON): OFF면 브라우저 종료 시 로그아웃(`naum.persistLogin` + sessionStorage alive 마커). 보건교사/교육청=이메일+비번 유지.
+- (솔라피 SMS·휴대폰 OTP는 보류)
+
 ### 최근 추가(2026-06-17) — 설치형 PWA(오프라인 앱)
 - **PWA(설치형 웹앱)**: `vite-plugin-pwa`(Workbox). 서비스워커가 앱 셸을 precache → **APK처럼 설치(홈화면/바탕화면) + 오프라인 실행**. `manifest.webmanifest`(아이콘 `public/icon.svg`), `registerSW({immediate})` in main.tsx, autoUpdate. CDN(tabler 아이콘) runtimeCaching=CacheFirst. **"앱 설치" 버튼**(`components/InstallButton.tsx`, beforeinstallprompt) — 상단바·로그인 화면. vercel.json `sw.js` no-cache 헤더. 데이터 오프라인(아웃박스)과 합쳐 완전 오프라인.
 

@@ -41,4 +41,26 @@ async function deriveTokenHex(input: string): Promise<string> {
 export const schoolStudentToken = (studentId: string) => deriveTokenHex(`student:${studentId}`)
 export const schoolClassToken = (grade: number, classNo: number) => deriveTokenHex(`class:${grade}-${classNo}`)
 
+// ── 로그인 토큰(보건교사 발급 → 교사/학부모 배부) — 자체완결 암호문. 학교 키로만 복호(서버·외부 불가) ──
+const schoolLoginKey = () => deriveKey('login')
+
+const b64url = (s: string) => btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+const unb64url = (s: string) => atob(s.replace(/-/g, '+').replace(/_/g, '/'))
+
+/** payload(역할·학반/학생)를 암호화한 배부용 토큰 문자열. */
+export async function issueLoginToken(payload: unknown): Promise<string> {
+  const enc = await encryptJson(await schoolLoginKey(), payload)
+  return b64url(JSON.stringify(enc))
+}
+
+/** 토큰 복호 → payload(잘못된 토큰이면 null). */
+export async function decodeLoginToken<T = unknown>(token: string): Promise<T | null> {
+  try {
+    const enc = JSON.parse(unb64url(token.trim())) as Enc
+    return await decryptJson<T>(await schoolLoginKey(), enc)
+  } catch {
+    return null
+  }
+}
+
 export { encryptJson, decryptJson, type Enc }

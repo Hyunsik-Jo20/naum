@@ -24,12 +24,30 @@ const TABS: { role: Role; label: string; icon: string }[] = [
 ]
 
 export default function Login() {
-  const { loginNurse, loginEdu, loginTeacher, loginParent, loginPassword, authMode, session } = useAuth()
+  const { loginNurse, loginEdu, loginTeacher, loginParent, loginPassword, loginToken, authMode, session } = useAuth()
   const nav = useNavigate()
   const [tab, setTab] = useState<Role>('nurse')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
+  const [keepLogin, setKeepLogin] = useState(true) // 로그인 상태 유지(기본 ON)
+  const [cloudMode, setCloudMode] = useState<'staff' | 'token'>('staff') // 직원 vs 교사·학부모(토큰)
+  // 토큰 로그인 입력
+  const [tk, setTk] = useState('')
+  const [tkRole, setTkRole] = useState<'teacher' | 'parent'>('teacher')
+  const [tkGrade, setTkGrade] = useState(1)
+  const [tkClass, setTkClass] = useState(1)
+  const [tkChild, setTkChild] = useState('')
+  const [tkName, setTkName] = useState('')
+
+  // "로그인 상태 유지" 플래그 — OFF면 브라우저 종료 시 로그아웃(auth 부팅에서 적용).
+  const applyPersist = () => {
+    try {
+      localStorage.setItem('naum.persistLogin', keepLogin ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }
 
   // 클라우드 모드: 로그인(또는 기존 세션) 시 역할별 홈으로 자동 이동.
   useEffect(() => {
@@ -69,6 +87,7 @@ export default function Login() {
 
   async function submitCloud() {
     setErr('')
+    applyPersist()
     setBusy(true)
     const e = await loginPassword(email, password)
     setBusy(false)
@@ -78,6 +97,7 @@ export default function Login() {
 
   async function quickLogin(em: string) {
     setErr('')
+    applyPersist()
     setEmail(em)
     setPassword(DEMO_PW)
     setBusy(true)
@@ -86,6 +106,22 @@ export default function Login() {
     if (e) return setErr(e)
   }
 
+  async function submitToken() {
+    setErr('')
+    if (!tk.trim()) return setErr('토큰을 입력하세요.')
+    applyPersist()
+    setBusy(true)
+    const info =
+      tkRole === 'teacher'
+        ? { grade: tkGrade, classNo: tkClass, name: tkName }
+        : { childName: tkChild }
+    const e = await loginToken(tk, info)
+    setBusy(false)
+    if (e) return setErr(e)
+    // 역할별 이동은 useEffect(session)가 처리.
+  }
+  const tkClassNos = classes.filter((c) => Number(c.split('-')[0]) === tkGrade).map((c) => Number(c.split('-')[1])).sort((a, b) => a - b)
+
   // ── 클라우드(Supabase) 모드: 이메일 + 비밀번호 단일 폼. 역할은 계정 프로필에서 결정. ──
   if (authMode === 'supabase') {
     return (
@@ -93,29 +129,81 @@ export default function Login() {
         <div className="login-card">
           <div className="login-brand">나음 <span style={{ color: 'var(--info)' }}>NaUM</span></div>
           <div className="login-tag">보건실 디지털 전환 플랫폼 · 로그인</div>
-          <label className="login-field">이메일
-            <input type="email" value={email} placeholder="이메일" onChange={(e) => setEmail(e.target.value)} />
-          </label>
-          <label className="login-field">비밀번호
-            <input type="password" value={password} placeholder="비밀번호" onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submitCloud()} />
-          </label>
-          {err && <div className="ai-err" style={{ marginBottom: 12 }}>{err}</div>}
-          <button className="btn primary" style={{ width: '100%', justifyContent: 'center' }} disabled={busy} onClick={submitCloud}>
-            <i className="ti ti-login" aria-hidden="true" /> {busy ? '확인 중…' : '로그인'}
-          </button>
-
-          <div className="login-demo" style={{ margin: '16px 0 6px' }}>데모 빠른 로그인 (역할 선택)</div>
-          <div className="login-tabs grid4">
-            {DEMO_ACCOUNTS.map((a) => (
-              <button key={a.role} className="login-tab" disabled={busy} onClick={() => quickLogin(a.email)}>
-                <i className={`ti ${a.icon}`} aria-hidden="true" /> {a.label}
-              </button>
-            ))}
+          <div className="login-tabs grid4" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 12 }}>
+            <button className={`login-tab ${cloudMode === 'staff' ? 'on' : ''}`} onClick={() => { setCloudMode('staff'); setErr('') }}>
+              <i className="ti ti-stethoscope" aria-hidden="true" /> 보건교사·교육청
+            </button>
+            <button className={`login-tab ${cloudMode === 'token' ? 'on' : ''}`} onClick={() => { setCloudMode('token'); setErr('') }}>
+              <i className="ti ti-key" aria-hidden="true" /> 교사·학부모(토큰)
+            </button>
           </div>
 
-          <p className="muted" style={{ fontSize: 11, marginTop: 14, marginBottom: 0, lineHeight: 1.6 }}>
-            역할(보건교사·교사·학부모·교육청)은 계정에 따라 자동 적용됩니다. 데모 계정 비번 <b>{DEMO_PW}</b>.
-            <br />학생 키오스크는 로그인 없이 사용합니다.
+          {cloudMode === 'staff' ? (
+            <>
+              <label className="login-field">이메일
+                <input type="email" value={email} placeholder="이메일" onChange={(e) => setEmail(e.target.value)} />
+              </label>
+              <label className="login-field">비밀번호
+                <input type="password" value={password} placeholder="비밀번호" onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submitCloud()} />
+              </label>
+              {err && <div className="ai-err" style={{ marginBottom: 12 }}>{err}</div>}
+              <button className="btn primary" style={{ width: '100%', justifyContent: 'center' }} disabled={busy} onClick={submitCloud}>
+                <i className="ti ti-login" aria-hidden="true" /> {busy ? '확인 중…' : '로그인'}
+              </button>
+              <div className="login-demo" style={{ margin: '16px 0 6px' }}>데모 빠른 로그인 (역할 선택)</div>
+              <div className="login-tabs grid4">
+                {DEMO_ACCOUNTS.map((a) => (
+                  <button key={a.role} className="login-tab" disabled={busy} onClick={() => quickLogin(a.email)}>
+                    <i className={`ti ${a.icon}`} aria-hidden="true" /> {a.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="login-tabs grid4" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
+                <button className={`login-tab ${tkRole === 'teacher' ? 'on' : ''}`} onClick={() => { setTkRole('teacher'); setErr('') }}>담임</button>
+                <button className={`login-tab ${tkRole === 'parent' ? 'on' : ''}`} onClick={() => { setTkRole('parent'); setErr('') }}>학부모</button>
+              </div>
+              <label className="login-field">발급받은 토큰
+                <textarea rows={2} value={tk} placeholder="보건교사에게 받은 토큰 붙여넣기" onChange={(e) => setTk(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 12 }} />
+              </label>
+              {tkRole === 'teacher' ? (
+                <>
+                  <div className="row" style={{ gap: 8 }}>
+                    <label className="login-field" style={{ flex: 1 }}>학년
+                      <select value={tkGrade} onChange={(e) => setTkGrade(Number(e.target.value))}>
+                        {grades.map((g) => <option key={g} value={g}>{g}학년</option>)}
+                      </select>
+                    </label>
+                    <label className="login-field" style={{ flex: 1 }}>반
+                      <select value={tkClass} onChange={(e) => setTkClass(Number(e.target.value))}>
+                        {tkClassNos.map((c) => <option key={c} value={c}>{c}반</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <label className="login-field">이름(선택)
+                    <input value={tkName} placeholder="담임 이름" onChange={(e) => setTkName(e.target.value)} />
+                  </label>
+                </>
+              ) : (
+                <label className="login-field">자녀 이름
+                  <input value={tkChild} placeholder="자녀 이름 (토큰과 일치해야 함)" onChange={(e) => setTkChild(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submitToken()} />
+                </label>
+              )}
+              {err && <div className="ai-err" style={{ marginBottom: 12 }}>{err}</div>}
+              <button className="btn primary" style={{ width: '100%', justifyContent: 'center' }} disabled={busy} onClick={submitToken}>
+                <i className="ti ti-login" aria-hidden="true" /> {busy ? '확인 중…' : '로그인'}
+              </button>
+            </>
+          )}
+
+          <label className="row" style={{ gap: 8, marginTop: 14, fontSize: 13, color: 'var(--text-2)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={keepLogin} onChange={(e) => setKeepLogin(e.target.checked)} /> 로그인 상태 유지 (이 기기에서 계속 로그인)
+          </label>
+
+          <p className="muted" style={{ fontSize: 11, marginTop: 10, marginBottom: 0, lineHeight: 1.6 }}>
+            교사·학부모는 보건교사가 발급한 <b>토큰</b>으로 로그인합니다. 학생 키오스크는 로그인 없이 사용합니다.
           </p>
           <div style={{ marginTop: 12, textAlign: 'center' }}><InstallButton /></div>
         </div>

@@ -6,6 +6,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { SCHOOL } from '../data/location'
 import { students } from '../data/mock'
 import { supabase, SUPABASE_ENABLED } from '../data/supabaseClient'
+import { decodeLoginToken } from '../data/schoolCrypto'
 
 export { SUPABASE_ENABLED }
 
@@ -40,6 +41,27 @@ function loadCachedSession(): Session | null {
   }
 }
 
+// 토큰 로그인 세션(교사·학부모, Supabase 계정 없이 로컬). 보건교사/교육청 세션과 상호배타.
+const LS_TOKEN_SESSION = 'naum.tokensession'
+function cacheTokenSession(s: Session | null) {
+  try {
+    if (s) localStorage.setItem(LS_TOKEN_SESSION, JSON.stringify(s))
+    else localStorage.removeItem(LS_TOKEN_SESSION)
+  } catch {
+    /* ignore */
+  }
+}
+function loadTokenSession(): Session | null {
+  try {
+    const o = JSON.parse(localStorage.getItem(LS_TOKEN_SESSION) || 'null')
+    return o && o.role ? (o as Session) : null
+  } catch {
+    return null
+  }
+}
+
+interface TokenPayload { r: 't' | 'p'; g?: number; c?: number; sid?: string; n?: string }
+
 function load(): Session | null {
   try {
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null')
@@ -55,6 +77,11 @@ interface AuthCtx {
   authLoading: boolean // supabase 모드: 최초 세션 복원 중이면 true(보호 라우트가 튕기지 않게)
   // 클라우드(supabase) 모드 — 이메일+비밀번호. 역할/소속은 profiles에서 로드.
   loginPassword: (email: string, password: string) => Promise<string | null>
+  // 교사·학부모 — 보건교사가 발급한 토큰 + 학반/자녀 정보로 매칭(Supabase 계정 불필요).
+  loginToken: (
+    token: string,
+    info: { grade?: number; classNo?: number; childName?: string; name?: string },
+  ) => Promise<string | null>
   // 데모(로컬) 모드 — 역할별 PIN 1234.
   loginNurse: (name: string, pin: string) => string | null
   loginEdu: (id: string, pw: string) => string | null
@@ -105,13 +132,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // [supabase] 기존 세션 복원 + 인증 상태 변화 구독 → profiles에서 역할 로드.
+  // [supabase] 세션 복원 — 토큰 세션(교사/학부모) 우선, 없으면 Supabase 세션(보건교사/교육청).
   useEffect(() => {
     if (!SUPABASE_ENABLED || !supabase) return
     let ok = true
-    supabase.auth.getSession().then(async ({ data }) => {
+    const sb = supabase
+    ;(async () => {
+      // 로그인 상태 유지 OFF + 새 브라우저 세션 → 모두 만료(세션 한정 로그인)
+      try {
+        if (localStorage.getItem('naum.persistLogin') === '0' && !sessionStorage.getItem('naum.alive')) {
+          cacheTokenSession(null)
+          await sb.auth.signOut()
+        }
+        sessionStorage.setItem('naum.alive', '1')
+      } catch {
+        /* ignore */
+      }
+      // 1) 토큰 세션(교사/학부모)
+      const tok = loadTokenSession()
+      if (tok) {
+        if (ok) {
+          setSession(tok)
+          setAuthLoading(false)
+        }
+        return
+      }
+      // 2) Supabase 세션(보건교사/교육청)
+      const { data } = await sb.auth.getSession()
       const uid = data.session?.user.id
-      // 온라인이면 프로필 조회, 오프라인/조회 실패 시 캐시된 세션으로 복원(오프라인 사용).
       let s = uid ? await loadProfileSession(uid) : null
       if (!s && uid) s = loadCachedSession()
       if (ok) {
@@ -119,8 +167,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         cacheSession(s)
         setAuthLoading(false)
       }
-    })
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_e, sess) => {
+    })()
+    const { data: sub } = sb.auth.onAuthStateChange(async (_e, sess) => {
+      if (loadTokenSession()) return // 토큰 세션 중엔 Supabase 상태로 덮지 않음
       let s = sess?.user ? await loadProfileSession(sess.user.id) : null
       if (!s && sess?.user) s = loadCachedSession()
       if (ok) {
@@ -150,6 +199,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!s) return '계정에 역할(프로필)이 설정되어 있지 않습니다. 관리자에게 문의하세요.'
         setSession(s)
         cacheSession(s) // 오프라인 복원용
+        return null
+      },
+      // 교사·학부모 토큰 로그인 — 토큰 복호 + 입력 정보 매칭 → 로컬 세션.
+      loginToken: async (token, info) => {
+        const p = await decodeLoginToken<TokenPayload>(token)
+        if (!p || (p.r !== 't' && p.r !== 'p')) return '토큰이 올바르지 않습니다. 보건교사에게 다시 받아주세요.'
+        if (p.r === 't') {
+          if (info.grade !== p.g || info.classNo !== p.c) return '학년·반이 토큰과 일치하지 않습니다.'
+          const s: Session = {
+            role: 'teacher',
+            name: info.name?.trim() || `${p.g}-${p.c} 담임`,
+            org: SCHOOL.name,
+            grade: p.g,
+            classNo: p.c,
+          }
+          cacheTokenSession(s)
+          setSession(s)
+          return null
+        }
+        const childName = (info.childName ?? '').trim()
+        if (!p.sid || !childName || childName !== (p.n ?? '')) return '자녀 이름이 토큰과 일치하지 않습니다.'
+        const s: Session = { role: 'parent', name: `${p.n} 보호자`, org: SCHOOL.name, childId: p.sid, childName: p.n }
+        cacheTokenSession(s)
+        setSession(s)
         return null
       },
       // 데모: PIN 1234
@@ -185,8 +258,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       logout: () => {
         if (SUPABASE_ENABLED && supabase) {
-          void supabase.auth.signOut()
+          cacheTokenSession(null) // 교사/학부모 토큰 세션
           cacheSession(null)
+          void supabase.auth.signOut()
           setSession(null)
         } else {
           persist(null)

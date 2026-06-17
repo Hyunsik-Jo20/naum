@@ -5,6 +5,7 @@ import { minutesSince, useVisits } from '../store/visits'
 import { useNotices } from '../store/notices'
 import TreatPanel from '../components/TreatPanel'
 import AddVisitModal from '../components/AddVisitModal'
+import LoginTokenModal from '../components/LoginTokenModal'
 import type { Student, Visit } from '../types'
 
 function hhmm(ts: number): string {
@@ -24,6 +25,7 @@ export default function NurseQueue() {
   const { nurseInbox, clearNurseInbox } = useNotices()
   const [activeId, setActiveId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [showToken, setShowToken] = useState(false)
 
   const waiting = visits.filter((v) => v.status === 'waiting')
   const treating = visits.filter((v) => v.status === 'treating')
@@ -102,6 +104,9 @@ export default function NurseQueue() {
                 <i className="ti ti-users" aria-hidden="true" /> 명부
               </Link>
             </div>
+            <button className="btn ghost small" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowToken(true)} title="교사·학부모 로그인 토큰 발급">
+              <i className="ti ti-key" aria-hidden="true" /> 로그인 토큰 발급
+            </button>
             {/* 앵커 + target=_blank — window.open(크기지정)은 팝업 차단 대상이라 링크로 새 탭/창을 연다 */}
             <a
               href="/kiosk"
@@ -242,6 +247,7 @@ export default function NurseQueue() {
       </p>
 
       {showAdd && <AddVisitModal onClose={() => setShowAdd(false)} onSubmit={handleAdd} />}
+      {showToken && <LoginTokenModal onClose={() => setShowToken(false)} />}
     </div>
   )
 }
