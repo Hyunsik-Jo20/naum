@@ -137,7 +137,7 @@ export default function TreatPanel({
     setAiBusy(true)
     try {
       const syms = visit.symptomTileIds.map((id) => tileById(id)?.label).filter(Boolean) as string[]
-      const r = await aiTriage(syms, visit.grade, visit.sex)
+      const r = await aiTriage(syms, visit.grade, visit.sex, memo)
       if (r.diseases.length) {
         setDiseases(r.diseases.map((d, i) => ({ name: d.name, category: d.category, isPrimary: i === 0 })))
       }

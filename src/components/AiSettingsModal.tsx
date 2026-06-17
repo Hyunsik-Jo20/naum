@@ -1,7 +1,7 @@
 // 보건교사용 AI 설정창 — 제공자/API 키/모델 입력(병명·처치 추천에 사용).
 //  키는 이 브라우저 localStorage 에만 저장. 호출 시 학생 PII는 전송하지 않음(증상만).
 import { useState } from 'react'
-import { AI_PROVIDERS, loadAiConfig, saveAiConfig, type AiConfig, type AiProvider } from '../data/ai'
+import { AI_PROVIDERS, loadAiConfig, saveAiConfig, DEFAULT_TRIAGE_PROMPT, type AiConfig, type AiProvider } from '../data/ai'
 
 export default function AiSettingsModal({ onClose }: { onClose: () => void }) {
   const [cfg, setCfg] = useState<AiConfig>(() => loadAiConfig())
@@ -45,6 +45,29 @@ export default function AiSettingsModal({ onClose }: { onClose: () => void }) {
             <input value={cfg.baseUrl ?? ''} placeholder="https://host/v1" onChange={(e) => setCfg((c) => ({ ...c, baseUrl: e.target.value }))} />
           </label>
         )}
+
+        <label className="login-field">
+          <span className="row between" style={{ alignItems: 'center' }}>
+            <span>추천 프롬프트 (역할·판단 기준)</span>
+            <button
+              type="button"
+              className="btn ghost small"
+              onClick={() => setCfg((c) => ({ ...c, triagePrompt: DEFAULT_TRIAGE_PROMPT }))}
+              title="기본값으로 되돌리기"
+            >
+              <i className="ti ti-rotate" aria-hidden="true" /> 기본값
+            </button>
+          </span>
+          <textarea
+            rows={6}
+            value={cfg.triagePrompt}
+            onChange={(e) => setCfg((c) => ({ ...c, triagePrompt: e.target.value }))}
+            style={{ resize: 'vertical', lineHeight: 1.5 }}
+          />
+        </label>
+        <p className="muted" style={{ fontSize: 11, margin: '-4px 0 0', lineHeight: 1.6 }}>
+          증상과 <b>보건교사가 입력한 기타/특이사항</b>을 함께 보고 추천합니다. 출력 형식(JSON)은 자동 고정되어 수정과 무관하게 안전합니다.
+        </p>
 
         <div className="row" style={{ justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
           <button className="btn ghost" onClick={onClose}>취소</button>

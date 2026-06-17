@@ -27,7 +27,18 @@ export interface AiConfig {
   morningPrompt: string // 아침 보고 기본 프롬프트(수정 가능)
   eveningPrompt: string // 저녁 보고 기본 프롬프트(수정 가능)
   intervalPrompt: string // 주기(30분·1시간) 보고 기본 프롬프트(수정 가능)
+  triagePrompt: string // 보건실 병명·처치 추천 프롬프트(수정 가능)
 }
+
+// 보건실 병명·처치 추천 기본 프롬프트(보건교사가 설정창에서 수정 가능).
+// ※ 출력 JSON 형식은 코드에서 강제하므로(파싱 안정), 이 프롬프트는 "역할·판단 기준"만 담는다.
+export const DEFAULT_TRIAGE_PROMPT =
+  '당신은 학교 보건실 보건교사를 돕는 임상 보조입니다. ' +
+  '학생이 키오스크에서 고른 증상과 보건교사가 입력한 "기타/특이사항"을 함께 고려하여, ' +
+  '가능성 높은 병명과 계통, 감염병 의심 여부, 보건실에서 바로 할 수 있는 기본 처치 3가지를 제안하세요. ' +
+  '진단을 확정하지 말고 보수적으로 "추천(확인 필요)" 수준으로 제안하세요. ' +
+  '발열+기침/인후통, 구토+설사, 발진+발열, 눈 충혈 등 전염 가능 패턴이면 감염병 의심으로 표시하고 경고를 작성하세요. ' +
+  '학생 개인정보(이름·반·번호)는 제공되지 않으며 추정하지 마세요.'
 
 export const DEFAULT_MORNING_PROMPT =
   '당신은 부산시교육청 학교보건 상황실의 분석 담당입니다. 지금은 등교 전 "아침 보고(08:00)"입니다. ' +
@@ -60,6 +71,7 @@ export function loadAiConfig(): AiConfig {
     morningPrompt: DEFAULT_MORNING_PROMPT,
     eveningPrompt: DEFAULT_EVENING_PROMPT,
     intervalPrompt: DEFAULT_INTERVAL_PROMPT,
+    triagePrompt: DEFAULT_TRIAGE_PROMPT,
   }
   try {
     const o = JSON.parse(localStorage.getItem(LS_KEY) || 'null')
@@ -70,6 +82,7 @@ export function loadAiConfig(): AiConfig {
         morningPrompt: o.morningPrompt || base.morningPrompt,
         eveningPrompt: o.eveningPrompt || base.eveningPrompt,
         intervalPrompt: o.intervalPrompt || base.intervalPrompt,
+        triagePrompt: o.triagePrompt || base.triagePrompt,
       }
     }
   } catch {
