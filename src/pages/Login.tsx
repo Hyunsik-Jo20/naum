@@ -6,6 +6,15 @@ import { classes } from '../data/mock'
 
 const roleHome = (r: Role) => (r === 'edu' ? '/edu' : r === 'teacher' ? '/teacher' : r === 'parent' ? '/parent' : '/')
 
+// 클라우드(supabase) 데모 계정 — 대시보드에서 동일 이메일/비번으로 생성해 두면 빠른 로그인 동작.
+const DEMO_PW = 'Demo1234!'
+const DEMO_ACCOUNTS: { role: Role; label: string; icon: string; email: string }[] = [
+  { role: 'nurse', label: '보건교사', icon: 'ti-stethoscope', email: 'nurse@naum.kr' },
+  { role: 'teacher', label: '담임(1-1)', icon: 'ti-user', email: 'teacher@naum.kr' },
+  { role: 'parent', label: '학부모(장지호)', icon: 'ti-users', email: 'parent@naum.kr' },
+  { role: 'edu', label: '교육청', icon: 'ti-building-bank', email: 'edu@naum.kr' },
+]
+
 const TABS: { role: Role; label: string; icon: string }[] = [
   { role: 'nurse', label: '보건교사', icon: 'ti-stethoscope' },
   { role: 'teacher', label: '교사(담임)', icon: 'ti-user' },
@@ -66,6 +75,16 @@ export default function Login() {
     // 역할별 이동은 위 useEffect(session)가 처리.
   }
 
+  async function quickLogin(em: string) {
+    setErr('')
+    setEmail(em)
+    setPassword(DEMO_PW)
+    setBusy(true)
+    const e = await loginPassword(em, DEMO_PW)
+    setBusy(false)
+    if (e) return setErr(e)
+  }
+
   // ── 클라우드(Supabase) 모드: 이메일 + 비밀번호 단일 폼. 역할은 계정 프로필에서 결정. ──
   if (authMode === 'supabase') {
     return (
@@ -83,8 +102,18 @@ export default function Login() {
           <button className="btn primary" style={{ width: '100%', justifyContent: 'center' }} disabled={busy} onClick={submitCloud}>
             <i className="ti ti-login" aria-hidden="true" /> {busy ? '확인 중…' : '로그인'}
           </button>
+
+          <div className="login-demo" style={{ margin: '16px 0 6px' }}>데모 빠른 로그인 (역할 선택)</div>
+          <div className="login-tabs grid4">
+            {DEMO_ACCOUNTS.map((a) => (
+              <button key={a.role} className="login-tab" disabled={busy} onClick={() => quickLogin(a.email)}>
+                <i className={`ti ${a.icon}`} aria-hidden="true" /> {a.label}
+              </button>
+            ))}
+          </div>
+
           <p className="muted" style={{ fontSize: 11, marginTop: 14, marginBottom: 0, lineHeight: 1.6 }}>
-            역할(보건교사·교사·학부모·교육청)은 계정에 따라 자동 적용됩니다. 계정은 관리자가 발급합니다.
+            역할(보건교사·교사·학부모·교육청)은 계정에 따라 자동 적용됩니다. 데모 계정 비번 <b>{DEMO_PW}</b>.
             <br />학생 키오스크는 로그인 없이 사용합니다.
           </p>
         </div>
