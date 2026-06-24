@@ -40,6 +40,7 @@ interface VisitsCtx {
   startTreating: (id: string) => void
   completeVisit: (id: string, patch: Partial<Visit>) => void
   updateVisit: (id: string, patch: Partial<Visit>) => void
+  deleteVisit: (id: string) => void
 }
 
 const Ctx = createContext<VisitsCtx | null>(null)
@@ -353,6 +354,16 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
             offline.run({ type: 'emitStudent', studentId: student.id, payload: p, ts: treatedAt })
           }
         } else if (modeRef.current === 'backend') void apiPatchVisit(id, full)
+      },
+      // 방문 삭제(학생이 교실로 가버린 경우 등). 로컬에서 제거 + 클라우드 삭제.
+      deleteVisit: (id) => {
+        setStore((p) => {
+          const links = { ...p.links }
+          delete links[id]
+          return { visits: p.visits.filter((v) => v.id !== id), links }
+        })
+        if (modeRef.current === 'supabase') offline.run({ type: 'deleteVisit', id })
+        // backend 모드는 서버 삭제 API 미구현 — 로컬 제거만(데모/연수는 supabase·local 사용)
       },
     }),
     [store, mode],

@@ -36,7 +36,7 @@ export default function TreatPanel({
   visit: Visit
   onDone: (visitId: string, wasFollowup: boolean) => void
 }) {
-  const { completeVisit, updateVisit, studentOf, visits } = useVisits()
+  const { completeVisit, updateVisit, deleteVisit, studentOf, visits } = useVisits()
   const student = studentOf(visit.id)
   const isDone = visit.status === 'done'
 
@@ -247,15 +247,31 @@ export default function TreatPanel({
             </div>
           </div>
         </div>
-        {isDone ? (
-          <span className="pill success">
-            <i className="ti ti-check" aria-hidden="true" /> 종료됨
-          </span>
-        ) : (
-          <span className="pill info">
-            <i className="ti ti-clock" aria-hidden="true" /> 접수 {fmtTime(visit.createdAt)}
-          </span>
-        )}
+        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+          {isDone ? (
+            <span className="pill success">
+              <i className="ti ti-check" aria-hidden="true" /> 종료됨
+            </span>
+          ) : (
+            <span className="pill info">
+              <i className="ti ti-clock" aria-hidden="true" /> 접수 {fmtTime(visit.createdAt)}
+            </span>
+          )}
+          {!isDone && (
+            <button
+              className="btn ghost small"
+              title="삭제 (학생이 교실로 간 경우 등)"
+              onClick={() => {
+                if (confirm(`${student?.name ?? '이'} 학생 방문을 삭제할까요?`)) {
+                  deleteVisit(visit.id)
+                  onDone(visit.id, false)
+                }
+              }}
+            >
+              <i className="ti ti-trash" aria-hidden="true" /> 삭제
+            </button>
+          )}
+        </div>
       </div>
 
       {isDone && (

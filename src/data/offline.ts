@@ -10,6 +10,7 @@ import * as relay from '../api/supabaseRelay'
 export type OutboxOp =
   | { type: 'createVisit'; visit: Visit; studentId: string }
   | { type: 'patchVisit'; id: string; patch: Partial<Visit> }
+  | { type: 'deleteVisit'; id: string }
   | { type: 'emitClass'; grade: number; classNo: number; studentId: string; payload: ClassPayload; ts: number }
   | { type: 'emitStudent'; studentId: string; payload: ClassPayload; ts: number }
 
@@ -50,6 +51,8 @@ async function exec(op: OutboxOp): Promise<void> {
       return sb.createVisit(op.visit, op.studentId)
     case 'patchVisit':
       return sb.patchVisit(op.id, op.patch)
+    case 'deleteVisit':
+      return sb.deleteVisit(op.id)
     case 'emitClass':
       return relay.emitClass(op.grade, op.classNo, op.studentId, op.payload, op.ts)
     case 'emitStudent':

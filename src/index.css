@@ -507,6 +507,13 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
   padding: 10px 12px;
 }
 .visit-card.warn { border-left: 3px solid var(--warning); }
+.visit-card.has-del { position: relative; cursor: pointer; padding-right: 30px; }
+.vc-del {
+  position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 6px; background: transparent; color: var(--text-3); cursor: pointer; font-size: 14px;
+}
+.vc-del:hover { background: var(--danger-bg); color: var(--danger); }
 .visit-card.info { border: 2px solid var(--info); background: var(--info-bg); }
 .visit-card.done { opacity: 0.85; border-color: var(--border); }
 .vc-name { font-size: 14px; font-weight: 500; }

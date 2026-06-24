@@ -176,6 +176,14 @@ export async function patchVisit(id: string, patch: Partial<Visit>): Promise<voi
   if (error) console.error('[naum:supabase] patchVisit', error.message)
 }
 
+/** 방문 삭제(교실로 가버린 경우 등) — 방문 + 암호화 링크 모두 제거. */
+export async function deleteVisit(id: string): Promise<void> {
+  const sb = supabase!
+  const { error } = await sb.from('visits').delete().eq('id', id)
+  if (error) console.error('[naum:supabase] deleteVisit', error.message)
+  await sb.from('visit_links').delete().eq('visit_id', id)
+}
+
 /** 비식별 방문 변경 실시간 구독(Supabase Realtime). 반환값은 구독 해제 함수. */
 export function subscribeVisits(onVisit: (v: Visit) => void): () => void {
   const sb = supabase!

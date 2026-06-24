@@ -21,7 +21,7 @@ function symptomText(v: Visit): string {
 }
 
 export default function NurseQueue() {
-  const { visits, addVisit, startTreating, completeVisit, studentOf } = useVisits()
+  const { visits, addVisit, startTreating, completeVisit, deleteVisit, studentOf } = useVisits()
   const { nurseInbox, clearNurseInbox } = useNotices()
   const [activeId, setActiveId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
@@ -34,9 +34,21 @@ export default function NurseQueue() {
     return () => window.clearInterval(t)
   }, [])
 
-  const waiting = visits.filter((v) => v.status === 'waiting')
-  const treating = visits.filter((v) => v.status === 'treating')
-  const done = visits.filter((v) => v.status === 'done')
+  // 하루가 지나면 빈 화면 — 콘솔은 "오늘 접수" 건만 표시(어제 데이터는 자동으로 사라짐).
+  //  기록 자체는 클라우드·교장 보고(월간)에 보존됨.
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const todays = visits.filter((v) => v.createdAt >= todayStart.getTime())
+  const waiting = todays.filter((v) => v.status === 'waiting')
+  const treating = todays.filter((v) => v.status === 'treating')
+  const done = todays.filter((v) => v.status === 'done')
+
+  function removeVisit(id: string, name: string) {
+    if (confirm(`${name} 학생 방문을 삭제할까요? (교실로 간 경우 등)`)) {
+      if (activeId === id) setActiveId(null)
+      deleteVisit(id)
+    }
+  }
 
   useEffect(() => {
     if (activeId && visits.some((v) => v.id === activeId)) return
@@ -101,7 +113,7 @@ export default function NurseQueue() {
           <div className="nq-summary">
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>보건실 현황</h2>
             <span className="muted" style={{ fontSize: 12 }}>
-              오늘 {visits.length}명 · 대기 {waiting.length} · 처치 {treating.length}
+              오늘 {todays.length}명 · 대기 {waiting.length} · 처치 {treating.length}
             </span>
             <div className="row" style={{ gap: 6, width: '100%' }}>
               <Link to="/principal" className="btn small" style={{ flex: 1, justifyContent: 'center' }}>
@@ -165,18 +177,20 @@ export default function NurseQueue() {
                 <div className="col-empty">대기 학생 없음</div>
               ) : (
                 waiting.map((v) => (
-                  <button
-                    key={v.id}
-                    className="visit-card warn"
-                    onClick={() => selectWaiting(v)}
-                    title="지금 처치 시작"
-                  >
+                  <div key={v.id} className="visit-card warn has-del" onClick={() => selectWaiting(v)} title="지금 처치 시작">
+                    <button
+                      className="vc-del"
+                      title="삭제 (교실로 간 경우 등)"
+                      onClick={(e) => { e.stopPropagation(); removeVisit(v.id, nameOf(v)) }}
+                    >
+                      <i className="ti ti-x" aria-hidden="true" />
+                    </button>
                     <div className="vc-name">
                       {nameOf(v)} <span className="vc-class">{clsOf(v)}</span>
                     </div>
                     <div className="vc-sym">{symptomText(v)}</div>
                     <div className="vc-foot warning-t">{minutesSince(v.createdAt)}분 대기</div>
-                  </button>
+                  </div>
                 ))
               )}
               <button className="add-visit-btn" onClick={() => setShowAdd(true)}>
