@@ -26,6 +26,7 @@ interface Row {
   created_at: number
   called_at: number | null
   treated_at: number | null
+  observe_until: number | null
 }
 
 function fromRow(r: Row): Visit {
@@ -45,6 +46,7 @@ function fromRow(r: Row): Visit {
     createdAt: r.created_at,
     calledAt: r.called_at ?? undefined,
     treatedAt: r.treated_at ?? undefined,
+    observeUntil: r.observe_until ?? undefined,
   }
 }
 
@@ -66,6 +68,7 @@ function toRow(v: Visit): Row & { school_id: string } {
     created_at: v.createdAt,
     called_at: v.calledAt ?? null,
     treated_at: v.treatedAt ?? null,
+    observe_until: v.observeUntil ?? null,
   }
 }
 
@@ -82,6 +85,7 @@ function patchToRow(p: Partial<Visit>): Record<string, unknown> {
   if (p.guardianHandoff !== undefined) r.guardian_handoff = p.guardianHandoff
   if (p.calledAt !== undefined) r.called_at = p.calledAt
   if (p.treatedAt !== undefined) r.treated_at = p.treatedAt
+  if (p.observeUntil !== undefined) r.observe_until = p.observeUntil
   return r
 }
 

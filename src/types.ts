@@ -61,4 +61,5 @@ export interface Visit {
   createdAt: number
   calledAt?: number
   treatedAt?: number
+  observeUntil?: number // 관찰 결과 시, 보건실 관찰 종료 예정 시각(epoch ms)
 }

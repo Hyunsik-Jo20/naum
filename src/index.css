@@ -466,6 +466,7 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
 .warning-t { color: var(--warning); }
 .info-t { color: var(--info); }
 .success-t { color: var(--success); }
+.danger-t { color: var(--danger); }
 
 /* Nurse queue */
 .queue-grid {
@@ -1027,6 +1028,26 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
 .sync-go {
   margin-left: 4px; border: none; background: var(--info); color: #fff;
   font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; cursor: pointer;
+}
+/* 관찰: 처치화면 관찰 시간 줄 */
+.observe-line {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; border-radius: var(--border-radius-md, 10px);
+  background: var(--info-bg); color: var(--info); font-size: 13px; font-weight: 600;
+}
+/* 관찰 시간 모달 칩 */
+.obs-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.obs-chip {
+  padding: 14px 0; font-size: 16px; font-weight: 600; cursor: pointer;
+  border: 0.5px solid var(--border-2); border-radius: 12px; background: var(--surface); color: var(--text-2);
+}
+.obs-chip.on { background: var(--info); color: #fff; border-color: var(--info); }
+.obs-end { text-align: center; font-size: 14px; color: var(--text-2); margin: 12px 0 4px; }
+/* 완료 패널: 관찰 종료 카드 깜빡임 */
+.visit-card.observe-done { animation: obsflash 1.1s ease-in-out infinite; border-color: var(--danger); }
+@keyframes obsflash {
+  0%, 100% { background: var(--surface); }
+  50% { background: color-mix(in srgb, var(--danger) 22%, var(--surface)); }
 }
 /* 체온 선택 모달 */
 .temp-readout { text-align: center; font-size: 44px; font-weight: 700; line-height: 1.1; margin: 4px 0 14px; color: var(--text); }

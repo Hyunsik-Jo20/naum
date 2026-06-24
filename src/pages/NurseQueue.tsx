@@ -21,11 +21,18 @@ function symptomText(v: Visit): string {
 }
 
 export default function NurseQueue() {
-  const { visits, addVisit, startTreating, studentOf } = useVisits()
+  const { visits, addVisit, startTreating, completeVisit, studentOf } = useVisits()
   const { nurseInbox, clearNurseInbox } = useNotices()
   const [activeId, setActiveId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [showToken, setShowToken] = useState(false)
+  const [, setTick] = useState(0) // 관찰 남은시간 갱신·종료 감지용 주기 리렌더
+
+  // 관찰 시간 카운트다운/종료 감지 — 20초마다 리렌더
+  useEffect(() => {
+    const t = window.setInterval(() => setTick((x) => x + 1), 20000)
+    return () => window.clearInterval(t)
+  }, [])
 
   const waiting = visits.filter((v) => v.status === 'waiting')
   const treating = visits.filter((v) => v.status === 'treating')
@@ -223,22 +230,37 @@ export default function NurseQueue() {
             {done.length === 0 ? (
               <div className="col-empty">완료 학생 없음</div>
             ) : (
-              done.map((v) => (
-                <button
-                  key={v.id}
-                  className={`visit-card done ${active?.id === v.id ? 'editing' : ''}`}
-                  onClick={() => setActiveId(v.id)}
-                  title="사후 처치 추가·수정"
-                >
-                  <div className="vc-name">
-                    {nameOf(v)} <span className="vc-class">{clsOf(v)}</span>
-                  </div>
-                  <div className="vc-sym">{symptomText(v)}</div>
-                  <div className="vc-foot success-t">
-                    {v.outcome ?? '교실 복귀'} · 사후 보완 <i className="ti ti-pencil" aria-hidden="true" />
-                  </div>
-                </button>
-              ))
+              done.map((v) => {
+                const observing = v.outcome === '관찰' && !!v.observeUntil
+                const remainMin = observing ? Math.ceil((v.observeUntil! - Date.now()) / 60000) : 0
+                const ended = observing && remainMin <= 0
+                return (
+                  <button
+                    key={v.id}
+                    className={`visit-card done ${ended ? 'observe-done' : ''} ${active?.id === v.id ? 'editing' : ''}`}
+                    onClick={() => (ended ? completeVisit(v.id, { outcome: '교실 복귀' }) : setActiveId(v.id))}
+                    title={ended ? '교실 복귀로 전환 (담임 알림)' : observing ? '관찰 중' : '사후 처치 추가·수정'}
+                  >
+                    <div className="vc-name">
+                      {nameOf(v)} <span className="vc-class">{clsOf(v)}</span>
+                    </div>
+                    <div className="vc-sym">{symptomText(v)}</div>
+                    {ended ? (
+                      <div className="vc-foot danger-t">
+                        <i className="ti ti-bell-ringing" aria-hidden="true" /> 관찰 종료 · 교실 복귀 →
+                      </div>
+                    ) : observing ? (
+                      <div className="vc-foot info-t">
+                        <i className="ti ti-eye" aria-hidden="true" /> 관찰 중 · {remainMin}분 남음
+                      </div>
+                    ) : (
+                      <div className="vc-foot success-t">
+                        {v.outcome ?? '교실 복귀'} · 사후 보완 <i className="ti ti-pencil" aria-hidden="true" />
+                      </div>
+                    )}
+                  </button>
+                )
+              })
             )}
           </div>
         </div>

@@ -12,6 +12,7 @@ import { loadTreatments, saveTreatments } from '../data/treatments'
 import { aiTriage, aiConfigured } from '../data/aiTriage'
 import AiSettingsModal from './AiSettingsModal'
 import TempPickerModal from './TempPickerModal'
+import ObservePickerModal from './ObservePickerModal'
 import { useVisits } from '../store/visits'
 import type { Disease, Outcome, Visit } from '../types'
 
@@ -73,6 +74,8 @@ export default function TreatPanel({
   const [aiTreats, setAiTreats] = useState<string[]>([])
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false)
   const [tempOpen, setTempOpen] = useState(false)
+  const [observeOpen, setObserveOpen] = useState(false)
+  const [observeMinutes, setObserveMinutes] = useState(visit.observeUntil ? Math.max(10, Math.round((visit.observeUntil - (visit.treatedAt ?? Date.now())) / 60000)) : 30)
   const [outcome, setOutcome] = useState<Outcome>(visit.outcome ?? '교실 복귀')
   const [escort, setEscort] = useState<string[]>(visit.escort ?? ['보건교사'])
   const [transport, setTransport] = useState<'자가' | '119'>(visit.transport ?? '119')
@@ -198,7 +201,15 @@ export default function TreatPanel({
       escort: outcome === '병원 이송' ? escort : undefined,
       transport: outcome === '병원 이송' ? transport : undefined,
       guardianHandoff: outcome === '귀가' ? handoff : undefined,
+      // 관찰이면 종료 예정 시각, 아니면 해제
+      observeUntil: outcome === '관찰' ? Date.now() + observeMinutes * 60000 : undefined,
     }
+  }
+
+  // 결과 선택 — 관찰이면 시간 선택 모달을 띄운다.
+  function pickOutcome(o: Outcome) {
+    setOutcome(o)
+    if (o === '관찰') setObserveOpen(true)
   }
 
   function complete() {
@@ -393,19 +404,27 @@ export default function TreatPanel({
       <div className="sec-label" style={{ marginBottom: 10 }}>
         결과 <span className="muted-inline">· 기본 교실 복귀 (안 누르면 자동)</span>
       </div>
-      <div className="outcome-grid" style={{ marginBottom: plainOutcome ? 24 : 12 }}>
+      <div className="outcome-grid" style={{ marginBottom: outcome === '관찰' ? 10 : plainOutcome ? 24 : 12 }}>
         {OUTCOMES.map((o) => (
           <button
             key={o}
             className={`outcome ${outcome === o ? 'on' : ''} ${
               o === '병원 이송' && outcome === o ? 'danger' : ''
             }`}
-            onClick={() => setOutcome(o)}
+            onClick={() => pickOutcome(o)}
           >
             {o}
           </button>
         ))}
       </div>
+
+      {outcome === '관찰' && (
+        <div className="observe-line" style={{ marginBottom: 16 }}>
+          <i className="ti ti-eye" aria-hidden="true" /> 보건실 관찰 <b>{observeMinutes}분</b>
+          <span className="muted-inline"> · 종료 {new Date(Date.now() + observeMinutes * 60000).toTimeString().slice(0, 5)}</span>
+          <button className="btn ghost small" style={{ marginLeft: 'auto' }} onClick={() => setObserveOpen(true)}>변경</button>
+        </div>
+      )}
 
       {outcome === '귀가' && (
         <label className="handoff" style={{ marginBottom: 12 }}>
@@ -458,6 +477,13 @@ export default function TreatPanel({
       </div>
       {aiSettingsOpen && <AiSettingsModal onClose={() => setAiSettingsOpen(false)} />}
       {tempOpen && <TempPickerModal initial={curTemp ?? 36.5} onConfirm={applyTemp} onClose={() => setTempOpen(false)} />}
+      {observeOpen && (
+        <ObservePickerModal
+          initialMin={observeMinutes}
+          onConfirm={(m) => { setObserveMinutes(m); setObserveOpen(false) }}
+          onClose={() => setObserveOpen(false)}
+        />
+      )}
     </div>
   )
 }
