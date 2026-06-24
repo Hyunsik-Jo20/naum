@@ -11,6 +11,7 @@ import {
 import { loadTreatments, saveTreatments } from '../data/treatments'
 import { aiTriage, aiConfigured } from '../data/aiTriage'
 import AiSettingsModal from './AiSettingsModal'
+import TempPickerModal from './TempPickerModal'
 import { useVisits } from '../store/visits'
 import type { Disease, Outcome, Visit } from '../types'
 
@@ -71,6 +72,7 @@ export default function TreatPanel({
   const [aiAlert, setAiAlert] = useState<string | null>(null)
   const [aiTreats, setAiTreats] = useState<string[]>([])
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false)
+  const [tempOpen, setTempOpen] = useState(false)
   const [outcome, setOutcome] = useState<Outcome>(visit.outcome ?? '교실 복귀')
   const [escort, setEscort] = useState<string[]>(visit.escort ?? ['보건교사'])
   const [transport, setTransport] = useState<'자가' | '119'>(visit.transport ?? '119')
@@ -168,6 +170,21 @@ export default function TreatPanel({
     if (!t) return
     if (!treatments.includes(t)) setTreatments((p) => [...p, t])
     setMemo('')
+  }
+
+  // 체온 측정 — 키보드 없이 모달로 값 선택. "체온 측정 37.5℃" 형태로 저장.
+  const TEMP_LABEL = '체온 측정'
+  const tempTreatment = treatments.find((t) => t.startsWith(TEMP_LABEL))
+  const curTemp = (() => {
+    const m = tempTreatment?.match(/([\d.]+)℃/)
+    return m ? Number(m[1]) : undefined
+  })()
+  function applyTemp(v: number) {
+    setTreatments((p) => [...p.filter((x) => !x.startsWith(TEMP_LABEL)), `${TEMP_LABEL} ${v.toFixed(1)}℃`])
+    setTempOpen(false)
+  }
+  function removeTemp() {
+    setTreatments((p) => p.filter((x) => !x.startsWith(TEMP_LABEL)))
   }
 
   function buildPatch(): Partial<Visit> {
@@ -313,21 +330,25 @@ export default function TreatPanel({
       </div>
       <div className="treat-grid">
         {treatOrder.map((t, i) => {
-          const on = treatments.includes(t)
+          const isTemp = t === TEMP_LABEL
+          const on = isTemp ? !!tempTreatment : treatments.includes(t)
+          // 체온 측정: 누르면 값 선택 모달(켜진 상태면 해제). 칩에 측정값 표시.
+          const onClick = isTemp ? () => (on ? removeTemp() : setTempOpen(true)) : () => toggleTreatment(t)
+          const label = isTemp && curTemp != null ? `${TEMP_LABEL} ${curTemp.toFixed(1)}℃` : t
           return (
             <button
               key={t}
               className={`chip drag ${on ? 'on' : ''} ${dragIdx === i ? 'dragging' : ''}`}
-              onClick={() => toggleTreatment(t)}
+              onClick={onClick}
               draggable
               onDragStart={() => setDragIdx(i)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => moveTreat(i)}
               onDragEnd={() => setDragIdx(null)}
-              title="드래그해서 순서 변경"
+              title={isTemp ? '체온 값 선택' : '드래그해서 순서 변경'}
             >
               <i className="ti ti-grip-vertical grip" aria-hidden="true" />
-              {on && <i className="ti ti-check" aria-hidden="true" />} {t}
+              {on && <i className="ti ti-check" aria-hidden="true" />} {label}
             </button>
           )
         })}
@@ -436,6 +457,7 @@ export default function TreatPanel({
         )}
       </div>
       {aiSettingsOpen && <AiSettingsModal onClose={() => setAiSettingsOpen(false)} />}
+      {tempOpen && <TempPickerModal initial={curTemp ?? 36.5} onConfirm={applyTemp} onClose={() => setTempOpen(false)} />}
     </div>
   )
 }

@@ -1028,6 +1028,25 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
   margin-left: 4px; border: none; background: var(--info); color: #fff;
   font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; cursor: pointer;
 }
+/* 체온 선택 모달 */
+.temp-readout { text-align: center; font-size: 44px; font-weight: 700; line-height: 1.1; margin: 4px 0 14px; color: var(--text); }
+.temp-readout .temp-unit { font-size: 22px; font-weight: 600; margin-left: 2px; }
+.temp-readout.success { color: var(--success); }
+.temp-readout.warning { color: var(--warning); }
+.temp-readout.danger { color: var(--danger); }
+.temp-row { display: flex; align-items: stretch; gap: 8px; }
+.temp-step {
+  flex: 0 0 56px; font-size: 28px; font-weight: 700; border: 0.5px solid var(--border-2);
+  border-radius: 12px; background: var(--surface); color: var(--text); cursor: pointer;
+}
+.temp-step:disabled { opacity: 0.35; cursor: default; }
+.temp-chips { flex: 1; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.temp-chip {
+  padding: 14px 0; font-size: 18px; font-weight: 600; border: 0.5px solid var(--border-2);
+  border-radius: 12px; background: var(--surface); color: var(--text-2); cursor: pointer;
+}
+.temp-chip.cur { background: var(--info); color: #fff; border-color: var(--info); font-size: 22px; font-weight: 800; }
+.temp-chip:disabled { opacity: 0.3; cursor: default; }
 /* AI 감염병 의심 경고 배너 */
 .infection-alert {
   display: flex; align-items: center; gap: 8px;
