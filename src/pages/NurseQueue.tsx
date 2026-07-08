@@ -6,6 +6,7 @@ import { useNotices } from '../store/notices'
 import TreatPanel from '../components/TreatPanel'
 import AddVisitModal from '../components/AddVisitModal'
 import LoginTokenModal from '../components/LoginTokenModal'
+import { loadNotifyTargets, saveNotifyTargets } from '../data/notifyTargets'
 import type { Student, Visit } from '../types'
 
 function hhmm(ts: number): string {
@@ -26,7 +27,16 @@ export default function NurseQueue() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [showToken, setShowToken] = useState(false)
+  const [notifyT, setNotifyT] = useState(() => loadNotifyTargets())
   const [, setTick] = useState(0) // 관찰 남은시간 갱신·종료 감지용 주기 리렌더
+
+  function toggleNotify(key: 'teacher' | 'parent') {
+    setNotifyT((prev) => {
+      const next = { ...prev, [key]: !prev[key] }
+      saveNotifyTargets(next)
+      return next
+    })
+  }
 
   // 관찰 시간 카운트다운/종료 감지 — 20초마다 리렌더
   useEffect(() => {
@@ -126,6 +136,15 @@ export default function NurseQueue() {
             <button className="btn ghost small" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowToken(true)} title="교사·학부모 로그인 토큰 발급">
               <i className="ti ti-key" aria-hidden="true" /> 로그인 토큰 발급
             </button>
+            <div className="notify-targets" title="접수·처치 알림을 누구에게 보낼지 선택">
+              <span className="nt-label"><i className="ti ti-bell" aria-hidden="true" /> 알림 대상</span>
+              <label className={`nt-chip ${notifyT.teacher ? 'on' : ''}`}>
+                <input type="checkbox" checked={notifyT.teacher} onChange={() => toggleNotify('teacher')} /> 담임
+              </label>
+              <label className={`nt-chip ${notifyT.parent ? 'on' : ''}`}>
+                <input type="checkbox" checked={notifyT.parent} onChange={() => toggleNotify('parent')} /> 학부모
+              </label>
+            </div>
             {/* 앵커 + target=_blank — window.open(크기지정)은 팝업 차단 대상이라 링크로 새 탭/창을 연다 */}
             <a
               href="/kiosk"

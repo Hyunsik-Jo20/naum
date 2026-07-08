@@ -16,6 +16,7 @@ import { loadLinks as loadLocalLinks } from '../data/localStation'
 import * as sb from '../api/supabaseBackend'
 import * as offline from '../data/offline'
 import { tileById } from '../data/mock'
+import { loadNotifyTargets } from '../data/notifyTargets'
 
 /**
  * 로컬/서버 분리 — 세 가지 모드로 동작(우선순위 supabase > backend > local):
@@ -304,8 +305,10 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
           // 온라인이면 즉시, 오프라인이면 큐에 쌓아 재연결 시 업로드.
           const sym = symptomTileIds.map((tid) => tileById(tid)?.label).filter(Boolean).join(' · ')
           offline.run({ type: 'createVisit', visit: v, studentId: student.id })
-          offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: { kind: '접수', sym }, ts: v.createdAt })
-          offline.run({ type: 'emitStudent', studentId: student.id, payload: { kind: '접수', sym }, ts: v.createdAt })
+          // 알림 대상 설정(담임/학부모)에 따라 발송
+          const nt = loadNotifyTargets()
+          if (nt.teacher) offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: { kind: '접수', sym }, ts: v.createdAt })
+          if (nt.parent) offline.run({ type: 'emitStudent', studentId: student.id, payload: { kind: '접수', sym }, ts: v.createdAt })
         } else if (modeRef.current === 'backend') void apiCreateVisit(v, student.id)
         return v
       },
@@ -350,8 +353,9 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
               treatments: patch.treatments,
               sym,
             }
-            offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: p, ts: treatedAt })
-            offline.run({ type: 'emitStudent', studentId: student.id, payload: p, ts: treatedAt })
+            const nt = loadNotifyTargets()
+            if (nt.teacher) offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: p, ts: treatedAt })
+            if (nt.parent) offline.run({ type: 'emitStudent', studentId: student.id, payload: p, ts: treatedAt })
           }
         } else if (modeRef.current === 'backend') void apiPatchVisit(id, full)
       },

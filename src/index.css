@@ -1036,6 +1036,16 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
   margin-left: 4px; border: none; background: var(--info); color: #fff;
   font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; cursor: pointer;
 }
+/* 알림 대상(담임/학부모) 선택 */
+.notify-targets { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.notify-targets .nt-label { font-size: 12px; color: var(--text-3); display: inline-flex; align-items: center; gap: 3px; }
+.nt-chip {
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+  font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 999px;
+  border: 0.5px solid var(--border-2); background: var(--surface); color: var(--text-3);
+}
+.nt-chip.on { background: var(--info-bg); color: var(--info); border-color: var(--info); }
+.nt-chip input { width: 13px; height: 13px; }
 /* 관찰: 처치화면 관찰 시간 줄 */
 .observe-line {
   display: flex; align-items: center; gap: 6px;
