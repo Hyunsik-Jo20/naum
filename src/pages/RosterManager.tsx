@@ -11,6 +11,16 @@ import {
   saveRoster,
 } from '../data/localRoster'
 import { readXlsxFirstSheet } from '../data/xlsxReader'
+import {
+  TEACHER_TEMPLATE,
+  clearTeacherRoster,
+  isCustomTeacherRoster,
+  parseTeacherCsv,
+  parseTeacherRows,
+  saveTeacherRoster,
+  teacherRoster,
+  type TeacherRow,
+} from '../data/teacherRoster'
 import type { Student } from '../types'
 
 export default function RosterManager() {
@@ -19,6 +29,48 @@ export default function RosterManager() {
   const [fileName, setFileName] = useState('')
   const [error, setError] = useState('')
   const custom = isCustomRoster()
+
+  // 담임 명부
+  const tFileRef = useRef<HTMLInputElement>(null)
+  const [tPreview, setTPreview] = useState<TeacherRow[] | null>(null)
+  const [tFileName, setTFileName] = useState('')
+  const [tError, setTError] = useState('')
+  const tCustom = isCustomTeacherRoster()
+
+  function onTFile(file: File) {
+    setTError('')
+    setTPreview(null)
+    setTFileName(file.name)
+    const isXlsx = /\.xlsx$/i.test(file.name)
+    file
+      .arrayBuffer()
+      .then(async (buf) => {
+        const res = isXlsx ? parseTeacherRows(await readXlsxFirstSheet(buf)) : parseTeacherCsv(decodeBuffer(buf))
+        if (res.error) setTError(res.error)
+        else setTPreview(res.teachers)
+      })
+      .catch((e) => setTError(`읽기 실패: ${e instanceof Error ? e.message : '오류'}`))
+  }
+  function applyT() {
+    if (!tPreview) return
+    saveTeacherRoster(tPreview)
+    alert(`담임 명부 ${tPreview.length}개 반을 적용했습니다. 화면을 새로고침합니다.`)
+    window.location.reload()
+  }
+  function resetT() {
+    if (!confirm('업로드한 담임 명부를 지울까요?')) return
+    clearTeacherRoster()
+    window.location.reload()
+  }
+  function downloadTTemplate() {
+    const blob = new Blob(['﻿' + TEACHER_TEMPLATE], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = '담임명부_양식.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const curStats = useMemo(() => {
     const grades = new Set(students.map((s) => s.grade))
@@ -165,6 +217,66 @@ export default function RosterManager() {
           {preview.length > 12 && <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>… 외 {preview.length - 12}명</div>}
         </div>
       )}
+
+      {/* ── 담임 명부 ── */}
+      <div className="card" style={{ marginTop: 24, marginBottom: 16 }}>
+        <div className="row between" style={{ marginBottom: 8 }}>
+          <div className="sec-label">
+            <i className="ti ti-user-check" style={{ verticalAlign: -2 }} aria-hidden="true" /> 담임 명부 (학년·반·담임명·연락처)
+          </div>
+          <span className={`report-badge ${tCustom ? 'done' : ''}`}>
+            {tCustom ? `등록 ${teacherRoster.length}반` : '미등록'}
+          </span>
+        </div>
+        <p className="muted" style={{ fontSize: 13, marginTop: 0, lineHeight: 1.7 }}>
+          담임 이름 표시 + 향후 문자(SMS) 발송용. <b>.xlsx</b> 또는 <b>CSV</b>, 열: <b>학년 · 반 · 담임명 · 연락처</b>.
+          연락처는 이 브라우저(로컬)에만 저장되며 서버로 전송되지 않습니다.
+        </p>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn" onClick={() => tFileRef.current?.click()}>
+            <i className="ti ti-file-spreadsheet" aria-hidden="true" /> 담임 명부 파일 선택
+          </button>
+          <button className="btn ghost" onClick={downloadTTemplate}>
+            <i className="ti ti-download" aria-hidden="true" /> 양식 내려받기
+          </button>
+          {tCustom && (
+            <button className="btn ghost" onClick={resetT}>
+              <i className="ti ti-rotate" aria-hidden="true" /> 담임 명부 지우기
+            </button>
+          )}
+          <input
+            ref={tFileRef}
+            type="file"
+            accept=".xlsx,.csv,.tsv,.txt"
+            style={{ display: 'none' }}
+            onChange={(e) => e.target.files?.[0] && onTFile(e.target.files[0])}
+          />
+        </div>
+        {tFileName && <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>선택: {tFileName}</div>}
+        {tError && <div className="admin-err" style={{ marginTop: 8 }}>{tError}</div>}
+
+        {tPreview && (
+          <div style={{ marginTop: 12 }}>
+            <div className="row between" style={{ marginBottom: 10 }}>
+              <div className="sec-label">미리보기 · {tPreview.length}반</div>
+              <button className="btn" onClick={applyT}><i className="ti ti-check" aria-hidden="true" /> 담임 명부 적용</button>
+            </div>
+            <div className="report-table-wrap">
+              <table className="report-table">
+                <thead><tr><th>학년</th><th>반</th><th>담임</th><th>연락처</th></tr></thead>
+                <tbody>
+                  {tPreview.slice(0, 12).map((t, i) => (
+                    <tr key={i}>
+                      <td>{t.grade}</td><td>{t.classNo}</td><td>{t.name}</td><td>{t.phone ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {tPreview.length > 12 && <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>… 외 {tPreview.length - 12}반</div>}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

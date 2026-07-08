@@ -13,6 +13,7 @@ import { aiTriage, aiConfigured } from '../data/aiTriage'
 import AiSettingsModal from './AiSettingsModal'
 import TempPickerModal from './TempPickerModal'
 import ObservePickerModal from './ObservePickerModal'
+import { teacherOf } from '../data/teacherRoster'
 import { useVisits } from '../store/visits'
 import type { Disease, Outcome, Visit } from '../types'
 
@@ -55,6 +56,7 @@ export default function TreatPanel({
     return recentVisitHint(student)
   }, [student, visits, visit.id, studentOf])
   const phone = student ? guardianPhone(student) : null
+  const teacher = student ? teacherOf(student.grade, student.classNo) : undefined
 
   const initial = visit.diseases.length
     ? visit.diseases
@@ -243,6 +245,17 @@ export default function TreatPanel({
                 <a className="sm-item sm-tel" href={`tel:${phone}`}>
                   <i className="ti ti-phone" aria-hidden="true" /> 학부모 {phone}
                 </a>
+              )}
+              {teacher && (
+                teacher.phone ? (
+                  <a className="sm-item sm-tel" href={`tel:${teacher.phone}`}>
+                    <i className="ti ti-user-check" aria-hidden="true" /> 담임 {teacher.name} {teacher.phone}
+                  </a>
+                ) : (
+                  <span className="sm-item">
+                    <i className="ti ti-user-check" aria-hidden="true" /> 담임 {teacher.name}
+                  </span>
+                )
               )}
             </div>
           </div>
