@@ -87,7 +87,7 @@ git push           # → Vercel 자동 재배포
 - **③ 분산 rate limit**: 현재 인스턴스 로컬(베스트에포트) → 운영은 Vercel KV/WAF 필요. `signup`(service_role 계정생성)도 IP/토큰별 제한 권장.
 
 ## 7. 미완료 / 다음 후보
-- **솔라피 SMS/알림톡 연동**: 승인 제출용 템플릿 문구 완료 → **[docs/SOLAPI_TEMPLATES.md](SOLAPI_TEMPLATES.md)**(학부모 5개 T1~T5 + 담임 5개 T6~T10, 결과별 분리, 변수 `#{}`). 발신번호 등록 + 카카오 템플릿 심사 진행 후 → `/api/sms`(키 서버보관) + 처치알림 발송 + 발신번호 교사별. 휴대폰 OTP 로그인도 솔라피+Supabase Send SMS Hook으로 후속.
+- **솔라피 SMS/알림톡 연동**: 템플릿 문구 + **발송 배관(`api/sms.js`·`data/sms.ts`) 구현 완료**([SOLAPI_TEMPLATES.md](SOLAPI_TEMPLATES.md) §6, 핸들러 mock 8종 통과). **남은 일**: ① 발신번호 등록 + 카카오 템플릿 승인 ② Vercel `SOLAPI_*` 환경변수 ③ 처치완료 흐름에 `sendSms` 연결(현재 오발송·과금 방지로 수동 배관만). 휴대폰 OTP 로그인도 솔라피+Supabase Send SMS Hook으로 후속.
 - ~~relay 재연결/오프라인 큐 보강~~ **(완료, 2026-07-10 — 6-1 참고)**.
 - ~~토큰 보안 강화(서버 서명)~~ **(코드 완료, 2026-07-10 — 6-2 참고)**. **배포 시 0008 + Vercel 환경변수 적용 필요**([SUPABASE_SETUP.md](SUPABASE_SETUP.md) §5-1). 미적용이면 기존 로컬 방식으로 폴백(앱 정상, 강화 미적용).
 - ~~번들 추가 최적화~~ **(완료, 2026-07-10 — 6-3 참고)**.
