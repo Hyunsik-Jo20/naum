@@ -47,6 +47,7 @@ export interface NurseMsg {
   sender?: string
   ts: number
   read?: boolean
+  kind?: 'msg' | 'notice' | 'alert' // msg=담임/학부모, notice=교육청 공지, alert=재난 경보
 }
 
 interface NoticeCtx {
@@ -135,30 +136,39 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
     toastTimer.current = window.setTimeout(() => setToast(null), 3500)
   }, [])
 
+  const addNurseMsg = useCallback((msg: NurseMsg) => {
+    setNurseInbox((p) => {
+      const next = [msg, ...p].slice(0, 50)
+      try {
+        localStorage.setItem(LS_NURSE, JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [])
+
   const send = useCallback(
     (n: SentNotice) => {
       // 교사·학부모 → 보건교사: 보건실 수신함에 적재(외부 발송 목록엔 안 넣음)
       if (n.to === '보건교사') {
-        const msg: NurseMsg = { title: n.title, body: n.body, sender: n.sender, ts: n.ts }
-        setNurseInbox((p) => {
-          const next = [msg, ...p].slice(0, 50)
-          try {
-            localStorage.setItem(LS_NURSE, JSON.stringify(next))
-          } catch {
-            /* ignore */
-          }
-          return next
-        })
+        addNurseMsg({ title: n.title, body: n.body ?? '', sender: n.sender, ts: n.ts, kind: 'msg' })
         pushNotify(n.title, n.body || '보건실 도착')
         showToast(`보건실 전달 · ${n.title}`)
         return
       }
       setSent((p) => [n, ...p])
+      // 교육청 → 학교 공지·경보는 보건교사 수신함에도 도착(데모: 학교 대상 공지 전달. 실서비스는 학교/지역 필터).
+      const toSchools = n.to === '학교' || (n.to !== '교육청' && (n.auto || (n.count ?? 0) > 0))
+      if (toSchools) {
+        const isAlert = !!n.auto || /경보|주의보|긴급|재난/.test(n.title)
+        addNurseMsg({ title: n.title, body: n.body ?? '', sender: n.sender ?? '교육청', ts: n.ts, kind: isAlert ? 'alert' : 'notice' })
+      }
       const tgt = n.to === '교육청' ? '교육청 보고' : `${n.count}개교`
       pushNotify(n.title, n.body || (n.to === '교육청' ? '교육청 보고' : `${n.region}·${n.level} ${n.count}개교`))
       showToast(`${n.auto ? '자동 ' : ''}발송 · ${tgt}: ${n.title}`)
     },
-    [showToast],
+    [showToast, addNurseMsg],
   )
 
   const clearNurseInbox = useCallback(() => {

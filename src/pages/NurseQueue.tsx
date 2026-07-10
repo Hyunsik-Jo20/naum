@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { classLabel, tileById } from '../data/mock'
 import { minutesSince, useVisits } from '../store/visits'
@@ -8,7 +8,12 @@ import AddVisitModal from '../components/AddVisitModal'
 import LoginTokenModal from '../components/LoginTokenModal'
 import ObserveResolveModal from '../components/ObserveResolveModal'
 import ObservePickerModal from '../components/ObservePickerModal'
+import DisasterStrip from '../components/DisasterStrip'
 import { loadNotifyTargets, saveNotifyTargets } from '../data/notifyTargets'
+import { fetchCurrent, type CurrentWeather } from '../data/weatherApi'
+import { deriveAlerts } from '../data/disasters'
+import { SCHOOL } from '../data/location'
+import { pushNotify } from '../push'
 import type { Student, Visit } from '../types'
 
 function hhmm(ts: number): string {
@@ -25,7 +30,9 @@ function symptomText(v: Visit): string {
 
 export default function NurseQueue() {
   const { visits, addVisit, startTreating, completeVisit, updateVisit, deleteVisit, studentOf } = useVisits()
-  const { nurseInbox, clearNurseInbox } = useNotices()
+  const { nurseInbox, clearNurseInbox, thresholds, openCompose } = useNotices()
+  const [wx, setWx] = useState<CurrentWeather | null>(null)
+  const notifiedAlerts = useRef<Set<string>>(new Set())
   const [activeId, setActiveId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [showToken, setShowToken] = useState(false)
@@ -47,6 +54,30 @@ export default function NurseQueue() {
     const t = window.setInterval(() => setTick((x) => x + 1), 20000)
     return () => window.clearInterval(t)
   }, [])
+
+  // 날씨·미세먼지 → 재난·기상 경보(콘솔에도 표시). 10분마다 갱신.
+  useEffect(() => {
+    let ok = true
+    const load = () => fetchCurrent(SCHOOL.lat, SCHOOL.lon).then((w) => ok && setWx(w)).catch(() => {})
+    load()
+    const t = window.setInterval(load, 10 * 60 * 1000)
+    return () => { ok = false; window.clearInterval(t) }
+  }, [])
+
+  const alerts = wx ? deriveAlerts(wx, SCHOOL.name, thresholds) : []
+
+  // 새 위험 경보가 뜨면 보건교사에게 로컬 푸시(하루 1회, 제목 기준 중복 방지).
+  useEffect(() => {
+    const day = new Date().toISOString().slice(0, 10)
+    alerts
+      .filter((a) => a.severity === 'danger')
+      .forEach((a) => {
+        const k = `${a.title}|${day}`
+        if (notifiedAlerts.current.has(k)) return
+        notifiedAlerts.current.add(k)
+        pushNotify(`[경보] ${a.title}`, a.detail)
+      })
+  }, [alerts])
 
   // 하루가 지나면 빈 화면 — 콘솔은 "오늘 접수" 건만 표시(어제 데이터는 자동으로 사라짐).
   //  기록 자체는 클라우드·교장 보고(월간)에 보존됨.
@@ -162,11 +193,19 @@ export default function NurseQueue() {
             </a>
           </div>
 
-          {/* 받은 알림 — 담임·학부모 → 보건실 */}
+          {/* 재난·기상 경보 — 콘솔에도 표시(위험 경보 시 로컬 푸시) */}
+          <div style={{ marginTop: 12 }}>
+            <DisasterStrip
+              alerts={alerts}
+              onNotify={(a) => openCompose({ title: `[긴급] ${a.title}`, body: a.detail, to: '교육청' })}
+            />
+          </div>
+
+          {/* 받은 공지·알림 — 담임·학부모 메시지 + 교육청 공지·경보 */}
           <div className="recv-box">
             <div className="row between" style={{ marginBottom: 6 }}>
               <span className="col-head info-t" style={{ padding: 0 }}>
-                <i className="ti ti-inbox" aria-hidden="true" /> 받은 알림 · {nurseInbox.length}
+                <i className="ti ti-inbox" aria-hidden="true" /> 받은 공지·알림 · {nurseInbox.length}
               </span>
               {nurseInbox.length > 0 && (
                 <button className="btn ghost small" onClick={clearNurseInbox} title="모두 지우기">
@@ -179,9 +218,17 @@ export default function NurseQueue() {
             ) : (
               <div className="recv-list">
                 {nurseInbox.map((m, i) => (
-                  <div key={i} className="recv-item">
+                  <div key={i} className={`recv-item ${m.kind ?? 'msg'}`}>
                     <div className="recv-top">
-                      <span className="recv-from">{m.sender ?? '발신자'}</span>
+                      <span className="recv-from">
+                        {m.kind === 'alert' ? (
+                          <><i className="ti ti-alert-triangle" aria-hidden="true" /> 재난 경보</>
+                        ) : m.kind === 'notice' ? (
+                          <><i className="ti ti-speakerphone" aria-hidden="true" /> 교육청 공지</>
+                        ) : (
+                          m.sender ?? '발신자'
+                        )}
+                      </span>
                       <span className="recv-time">{hhmm(m.ts)}</span>
                     </div>
                     <div className="recv-title">{m.title}</div>

@@ -714,6 +714,10 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
 .recv-box { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 0.5px solid var(--border); }
 .recv-list { display: flex; flex-direction: column; gap: 6px; }
 .recv-item { border: 0.5px solid var(--info); background: var(--info-bg); border-radius: var(--radius); padding: 7px 9px; }
+.recv-item.alert { border-color: var(--danger); background: var(--danger-bg); }
+.recv-item.alert .recv-from { color: var(--danger); }
+.recv-item.notice { border-color: var(--warning); background: var(--warning-bg); }
+.recv-item.notice .recv-from { color: var(--warning); }
 .recv-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .recv-from { font-size: 12px; font-weight: 600; color: var(--info); }
 .recv-time { font-size: 11px; color: var(--text-3); }
