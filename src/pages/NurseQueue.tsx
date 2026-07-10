@@ -6,6 +6,8 @@ import { useNotices } from '../store/notices'
 import TreatPanel from '../components/TreatPanel'
 import AddVisitModal from '../components/AddVisitModal'
 import LoginTokenModal from '../components/LoginTokenModal'
+import ObserveResolveModal from '../components/ObserveResolveModal'
+import ObservePickerModal from '../components/ObservePickerModal'
 import { loadNotifyTargets, saveNotifyTargets } from '../data/notifyTargets'
 import type { Student, Visit } from '../types'
 
@@ -22,11 +24,13 @@ function symptomText(v: Visit): string {
 }
 
 export default function NurseQueue() {
-  const { visits, addVisit, startTreating, completeVisit, deleteVisit, studentOf } = useVisits()
+  const { visits, addVisit, startTreating, completeVisit, updateVisit, deleteVisit, studentOf } = useVisits()
   const { nurseInbox, clearNurseInbox } = useNotices()
   const [activeId, setActiveId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [showToken, setShowToken] = useState(false)
+  const [resolveId, setResolveId] = useState<string | null>(null) // 관찰 종료 결과 선택 대상
+  const [extendId, setExtendId] = useState<string | null>(null) // 관찰 연장 대상
   const [notifyT, setNotifyT] = useState(() => loadNotifyTargets())
   const [, setTick] = useState(0) // 관찰 남은시간 갱신·종료 감지용 주기 리렌더
 
@@ -271,8 +275,8 @@ export default function NurseQueue() {
                   <button
                     key={v.id}
                     className={`visit-card done ${ended ? 'observe-done' : ''} ${active?.id === v.id ? 'editing' : ''}`}
-                    onClick={() => (ended ? completeVisit(v.id, { outcome: '교실 복귀' }) : setActiveId(v.id))}
-                    title={ended ? '교실 복귀로 전환 (담임 알림)' : observing ? '관찰 중' : '사후 처치 추가·수정'}
+                    onClick={() => (ended ? setResolveId(v.id) : setActiveId(v.id))}
+                    title={ended ? '관찰 종료 · 결과 선택 (복귀/귀가/병원/연장)' : observing ? '관찰 중' : '사후 처치 추가·수정'}
                   >
                     <div className="vc-name">
                       {nameOf(v)} <span className="vc-class">{clsOf(v)}</span>
@@ -280,7 +284,7 @@ export default function NurseQueue() {
                     <div className="vc-sym">{symptomText(v)}</div>
                     {ended ? (
                       <div className="vc-foot danger-t">
-                        <i className="ti ti-bell-ringing" aria-hidden="true" /> 관찰 종료 · 교실 복귀 →
+                        <i className="ti ti-bell-ringing" aria-hidden="true" /> 관찰 종료 · 결과 선택 →
                       </div>
                     ) : observing ? (
                       <div className="vc-foot info-t">
@@ -305,6 +309,21 @@ export default function NurseQueue() {
 
       {showAdd && <AddVisitModal onClose={() => setShowAdd(false)} onSubmit={handleAdd} />}
       {showToken && <LoginTokenModal onClose={() => setShowToken(false)} />}
+      {resolveId && (
+        <ObserveResolveModal
+          name={nameOf(visits.find((v) => v.id === resolveId) ?? ({} as Visit))}
+          onResolve={(outcome) => { completeVisit(resolveId, { outcome }); setResolveId(null) }}
+          onExtend={() => { setExtendId(resolveId); setResolveId(null) }}
+          onClose={() => setResolveId(null)}
+        />
+      )}
+      {extendId && (
+        <ObservePickerModal
+          initialMin={30}
+          onConfirm={(min) => { updateVisit(extendId, { observeUntil: Date.now() + min * 60000 }); setExtendId(null) }}
+          onClose={() => setExtendId(null)}
+        />
+      )}
     </div>
   )
 }

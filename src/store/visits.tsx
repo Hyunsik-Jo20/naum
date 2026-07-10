@@ -376,13 +376,15 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
           const student = sid ? findStudent(sid) : undefined
           if (student) {
             const cur = store.visits.find((v) => v.id === id)
-            const prim = (patch.diseases ?? []).find((d) => d.isPrimary) ?? (patch.diseases ?? [])[0]
+            // 관찰 → 최종 결과 전환처럼 patch에 병명·처치가 없으면 저장된 방문값으로 보완(알림 누락 방지).
+            const diseases = patch.diseases ?? cur?.diseases ?? []
+            const prim = diseases.find((d) => d.isPrimary) ?? diseases[0]
             const sym = cur?.symptomTileIds.map((t) => tileById(t)?.label).filter(Boolean).join(' · ')
             const p = {
               kind: '종료' as const,
-              outcome: (patch.outcome as string) ?? '교실 복귀',
+              outcome: (patch.outcome as string) ?? cur?.outcome ?? '교실 복귀',
               disease: prim?.name,
-              treatments: patch.treatments,
+              treatments: patch.treatments ?? cur?.treatments,
               sym,
             }
             const nt = loadNotifyTargets()
