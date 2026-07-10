@@ -74,6 +74,17 @@ git push           # → Vercel 자동 재배포
 - **Realtime 재연결 catch-up**: `subscribeClass/subscribeStudent`가 `SUBSCRIBED` 재도달 시 `onChange` 재발화(끊긴 사이 이벤트 재조회) + `online`/`visibilitychange` 시 재조회(소켓 절전 stall 대비). 수신 loader는 재시도 중복 이벤트 **dedupe**(토큰+시각+종류). 콘솔(`visits.tsx`)도 재연결/복귀 시 방문 재조회 병합(기존 로컬 유지, 없는 것만 추가 → 미업로드 되돌림 방지).
 - **상단바 표시**(`SyncStatus`): 온라인 재시도 중이면 "재시도 중 N건", dead-letter 있으면 "실패 N건".
 
+## 6-4. 보안 점검(2026-07-10) — 저위험 조치 완료 + 남은 항목
+**완료(코드/설정, `api/proxy.js`·`api/health.js`)**:
+- **입력검증**: proxy `endpoint`를 `^[A-Za-z0-9_]+$` 화이트리스트(경로 조작 차단), `svc`는 TARGETS만.
+- **인증/오남용**: proxy에 **Origin/Referer 검사**(동일출처·로컬만; 헤더 없으면 통과→앱 무중단)로 타 사이트 핫링크 차단. `health`의 `hasKey` 노출 제거.
+- **rate limit + 캐시**: proxy 200 응답 **CDN 캐시**(s-maxage=300)로 상류 쿼터 절감 + **IP 버스트 제한**(인스턴스 로컬 300/분, 베스트에포트). 검증: 실핸들러 8종 통과(404/400/403/200+캐시/무-Referer 통과/429/오류 무캐시).
+
+**남은 항목(위험도순, 결정·인프라 필요)**:
+- **① RLS 정책 과도하게 느슨(중)**: 전 테이블 RLS는 ON이나 정책이 `using(true)`/anon insert. `visits`·`app_state`를 아무 authenticated가 전체 수정/삭제, `relay_*`·`visits`에 anon 삽입 가능(비식별+E2E라 조회 노출은 없으나 무결성·스팸 위험). → 마이그레이션 0009로 school_id 스코프 + 쓰기 역할 제한(앱 동작 영향 있어 신중).
+- **② 학교 비밀 번들 노출(중~높)**: `VITE_SCHOOL_LINK_SECRET`이 클라이언트 번들에 포함(E2E 마스터 키). → 서버 발급 사용자별 키 교환으로 전환(대형 후속, 이미 문서화).
+- **③ 분산 rate limit**: 현재 인스턴스 로컬(베스트에포트) → 운영은 Vercel KV/WAF 필요. `signup`(service_role 계정생성)도 IP/토큰별 제한 권장.
+
 ## 7. 미완료 / 다음 후보
 - **솔라피 SMS/알림톡 연동**: 승인 제출용 템플릿 문구 완료 → **[docs/SOLAPI_TEMPLATES.md](SOLAPI_TEMPLATES.md)**(학부모 5개 T1~T5 + 담임 5개 T6~T10, 결과별 분리, 변수 `#{}`). 발신번호 등록 + 카카오 템플릿 심사 진행 후 → `/api/sms`(키 서버보관) + 처치알림 발송 + 발신번호 교사별. 휴대폰 OTP 로그인도 솔라피+Supabase Send SMS Hook으로 후속.
 - ~~relay 재연결/오프라인 큐 보강~~ **(완료, 2026-07-10 — 6-1 참고)**.
