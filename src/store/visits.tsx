@@ -226,6 +226,38 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
     }
   }, [mode])
 
+  // [supabase] 재연결/탭 복귀 시 catch-up — Realtime이 끊긴 사이 다른 기기가 만든 방문을 재조회 병합.
+  //  기존 방문은 로컬(낙관적 최신)을 유지하고 없는 것만 추가 → 미업로드 상태를 되돌리지 않음.
+  useEffect(() => {
+    if (mode !== 'supabase') return
+    let busy = false
+    const resync = async () => {
+      if (busy || !offline.isOnline()) return
+      busy = true
+      try {
+        const [visits, cloudLinks] = await Promise.all([sb.fetchVisits(), sb.fetchLinks()])
+        setStore((p) => {
+          const have = new Set(p.visits.map((v) => v.id))
+          const add = visits.filter((v) => !have.has(v.id))
+          return add.length || Object.keys(cloudLinks).length
+            ? { visits: [...p.visits, ...add], links: { ...cloudLinks, ...p.links } }
+            : p
+        })
+      } catch {
+        /* 무시(다음 트리거에 재시도) */
+      } finally {
+        busy = false
+      }
+    }
+    const onVis = () => { if (document.visibilityState === 'visible') void resync() }
+    window.addEventListener('online', resync)
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      window.removeEventListener('online', resync)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [mode])
+
   // [supabase] 상태가 바뀔 때마다 오프라인 캐시에 저장.
   useEffect(() => {
     if (mode === 'supabase') saveCache(store)

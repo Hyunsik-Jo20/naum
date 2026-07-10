@@ -108,17 +108,21 @@ export async function fetchVisits(): Promise<Visit[]> {
  *  - visit_links.enc: studentId를 학교 키로 암호화한 암호문만 → 서버는 못 읽고, 다른 학교 기기는 복호화로 이름 복원.
  *  - 로컬에도 평문 링크 저장(같은 기기 즉시 복원).
  *  insert 사용 — anon은 INSERT 정책만 보유(upsert는 UPDATE까지 요구). 방문 id는 새 난수라 충돌 없음. */
+// unique_violation — 오프라인 큐 재시도로 같은 방문을 다시 넣으면 이미 존재. 성공으로 간주(멱등).
+const DUP = '23505'
+
 export async function createVisit(visit: Visit, studentId: string): Promise<void> {
   saveLink(visit.id, studentId) // 로컬 평문(같은 기기)
   const sb = supabase!
   const { error } = await sb.from('visits').insert(toRow(visit))
-  if (error) console.error('[naum:supabase] createVisit', error.message)
+  if (error && error.code !== DUP) throw new Error(`createVisit: ${error.message}`) // 재시도 위해 전파
+  // 암호화 링크(다기기 이름 복원) — 베스트에포트: 실패해도 방문은 저장됨(+로컬 링크 존재).
   try {
     const enc = await encryptJson(await schoolLinkKey(), studentId)
     const { error: le } = await sb
       .from('visit_links')
       .insert({ visit_id: visit.id, school_id: SCHOOL_ID, enc, created_at: visit.createdAt })
-    if (le) console.error('[naum:supabase] createVisit link', le.message)
+    if (le && le.code !== DUP) console.error('[naum:supabase] createVisit link', le.message)
   } catch (e) {
     console.error('[naum:supabase] encrypt link', e)
   }
@@ -173,15 +177,16 @@ export function subscribeLinks(onLink: (l: { visitId: string; studentId: string 
 export async function patchVisit(id: string, patch: Partial<Visit>): Promise<void> {
   const sb = supabase!
   const { error } = await sb.from('visits').update(patchToRow(patch)).eq('id', id)
-  if (error) console.error('[naum:supabase] patchVisit', error.message)
+  if (error) throw new Error(`patchVisit: ${error.message}`) // 재시도 위해 전파
 }
 
 /** 방문 삭제(교실로 가버린 경우 등) — 방문 + 암호화 링크 모두 제거. */
 export async function deleteVisit(id: string): Promise<void> {
   const sb = supabase!
   const { error } = await sb.from('visits').delete().eq('id', id)
-  if (error) console.error('[naum:supabase] deleteVisit', error.message)
-  await sb.from('visit_links').delete().eq('visit_id', id)
+  if (error) throw new Error(`deleteVisit: ${error.message}`) // 재시도 위해 전파(삭제는 멱등)
+  const { error: le } = await sb.from('visit_links').delete().eq('visit_id', id)
+  if (le) console.error('[naum:supabase] deleteVisit link', le.message) // 베스트에포트
 }
 
 /** 비식별 방문 변경 실시간 구독(Supabase Realtime). 반환값은 구독 해제 함수. */

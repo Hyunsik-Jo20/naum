@@ -1032,6 +1032,7 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
 }
 .sync-chip.off { background: var(--warning-bg); color: var(--warning); }
 .sync-chip.up { background: var(--info-bg); color: var(--info); }
+.sync-chip.retry { background: var(--warning-bg); color: var(--warning); }
 .sync-go {
   margin-left: 4px; border: none; background: var(--info); color: #fff;
   font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; cursor: pointer;

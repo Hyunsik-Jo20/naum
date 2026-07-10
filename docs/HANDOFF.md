@@ -1,7 +1,7 @@
 # 나음(NaUM) — 다음 세션 이어가기 (핸드오프)
 
 > **새 세션은 이 파일부터 읽으세요.** 상세 이력은 [PROGRESS.md](PROGRESS.md), 배포·계정은 [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
-> 최종 업데이트: 2026-06-24 (알림 대상 선택·담임 명부 업로드 추가)
+> 최종 업데이트: 2026-07-10 (relay 재연결·오프라인 큐 보강 / 솔라피 알림톡 템플릿 승인문구 작성)
 
 ## 0. 한 줄 요약
 보건실 디지털 전환 플랫폼. 학생 키오스크 셀프접수 → 보건교사 콘솔 처치 → 담임·학부모 알림 → 교육청 비식별 대시보드.
@@ -65,9 +65,16 @@ git push           # → Vercel 자동 재배포
 ```
 - 검증은 preview MCP(`preview_start` name=`naum-dev`) + eval. 멀티프레임이라 click→eval은 한 eval 안에서 묶거나 nth-child로. 네이티브 confirm은 `window.confirm=()=>true`로 우회.
 
+## 6-1. 최근 추가(2026-07-10) — relay 재연결·오프라인 큐 보강
+- **오프라인 아웃박스 무유실·재시도 고도화**(`data/offline.ts`): 큐 항목을 `{id,op,tries}`로 관리(구버전 bare op 자동 마이그레이션). ① 온라인+큐 빈 경우 즉시 시도, 실패하면 큐로(유실 방지) ② 실패 op는 **버리지 않고 지수 백오프**(1→2→4→8→16→30s) 재시도, **순서 보존**(실패 op 뒤는 대기) ③ `MAX_TRIES(8)` 초과 op만 **dead-letter**(`naum.outbox.dead`)로 격리해 큐 안 막힘 ④ 재시도 트리거 = `online`+`visibilitychange`+주기 20초 ⑤ id 기반 제거로 flush 중 동시 append 유실 없음. 검증: 상태기계 시뮬(순서·무유실·백오프·dead-letter·동시append) 전부 통과 + 실모듈 정규화/마이그레이션 확인.
+- **쓰기 실패 전파**: `supabaseBackend.createVisit/patchVisit/deleteVisit`·`supabaseRelay.emitClass/emitStudent`가 에러를 삼키던 것 → **throw로 전파**(큐가 실패를 감지·재시도). `createVisit`는 재시도 멱등(23505 중복키=성공 간주), 링크·삭제 링크는 베스트에포트.
+- **Realtime 재연결 catch-up**: `subscribeClass/subscribeStudent`가 `SUBSCRIBED` 재도달 시 `onChange` 재발화(끊긴 사이 이벤트 재조회) + `online`/`visibilitychange` 시 재조회(소켓 절전 stall 대비). 수신 loader는 재시도 중복 이벤트 **dedupe**(토큰+시각+종류). 콘솔(`visits.tsx`)도 재연결/복귀 시 방문 재조회 병합(기존 로컬 유지, 없는 것만 추가 → 미업로드 되돌림 방지).
+- **상단바 표시**(`SyncStatus`): 온라인 재시도 중이면 "재시도 중 N건", dead-letter 있으면 "실패 N건".
+
 ## 7. 미완료 / 다음 후보
-- **솔라피 SMS 연동(보류)**: `/api/sms`(키 서버보관) + 처치알림 SMS + 발신번호 교사별(키 1개·발신번호 다수 등록). 설계는 대화 이력 참고. 휴대폰 OTP 로그인도 솔라피+Supabase Send SMS Hook으로 후속.
-- 공식 재난 API(승인 대기), relay 재연결/오프라인 큐 보강, 토큰 보안 강화(서버 서명), 번들 추가 최적화.
+- **솔라피 SMS/알림톡 연동**: 승인 제출용 템플릿 문구 완료 → **[docs/SOLAPI_TEMPLATES.md](SOLAPI_TEMPLATES.md)**(학부모 5개 T1~T5 + 담임 5개 T6~T10, 결과별 분리, 변수 `#{}`). 발신번호 등록 + 카카오 템플릿 심사 진행 후 → `/api/sms`(키 서버보관) + 처치알림 발송 + 발신번호 교사별. 휴대폰 OTP 로그인도 솔라피+Supabase Send SMS Hook으로 후속.
+- ~~relay 재연결/오프라인 큐 보강~~ **(완료, 2026-07-10 — 6-1 참고)**.
+- 공식 재난 API(승인 대기), 토큰 보안 강화(서버 서명), 번들 추가 최적화.
 - 연수 데이터 정리: `delete from public.visits; delete from public.visit_links; delete from public.relay_class_inbox; delete from public.relay_student_inbox;`
 
 ## 8. 핵심 파일 지도 (이번 세션 추가분)
