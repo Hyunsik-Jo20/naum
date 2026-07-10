@@ -7,6 +7,7 @@ import {
   schoolStudentKey,
   schoolClassToken,
   schoolStudentToken,
+  primeStudentTokens,
   encryptJson,
   decryptJson,
   type Enc,
@@ -151,6 +152,7 @@ export async function subscribeStudent(studentId: string, onChange: () => void):
 
 /** 토큰 → 학생 매핑(담임용): 우리 반 학생들의 결정적 토큰을 계산해 역참조 테이블 구성. */
 export async function buildClassTokenMap(students: { id: string; name: string; number: number }[]): Promise<Record<string, { name: string; number: number }>> {
+  await primeStudentTokens(students.map((s) => s.id)) // 서버 발급 시 한 번에(교사도 라우팅 토큰 허용)
   const out: Record<string, { name: string; number: number }> = {}
   await Promise.all(
     students.map(async (s) => {

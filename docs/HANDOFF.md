@@ -83,7 +83,7 @@ git push           # → Vercel 자동 재배포
 
 **남은 항목(위험도순, 결정·인프라 필요)**:
 - **① RLS 정책 느슨(중)**: **일부 조치 — `0009_rls_staff_scope.sql` 작성**(visits·visit_links 조회/수정/삭제·app_state 쓰기를 nurse/edu로 제한). **적용은 사용자가 스테이징 테스트 후 진행.** 유지된 부분(키오스크 anon INSERT, 교사/학부모 anon relay SELECT)은 기능상 필요+E2E로 방어. 남은 후속: school_id 다학교 스코프, anon insert 크기/횟수 제한.
-- **② 학교 비밀 번들 노출(중~높)**: `VITE_SCHOOL_LINK_SECRET`이 클라이언트 번들에 포함(E2E 마스터 키). → 서버 발급 사용자별 키 교환으로 전환(대형 후속, 이미 문서화).
+- **② 학교 비밀 번들 노출(중~높)**: **Phase 1 구현 완료** — `api/keys.js`(서버 발급 스코프 키)+`schoolCrypto.ts`(서버 우선·로컬 폴백·localStorage 캐시). 파생 알고리즘 동일이라 재암호화 불필요. 검증: 서버-클라이언트 파생 일치 16종 + 폴백 라운드트립 통과. **적용은 사용자가 [SUPABASE_SETUP §5-2](SUPABASE_SETUP.md) 2단계로**: Phase 1(`SCHOOL_MASTER_SECRET` env=기존값) → 확인 후 Phase 2(클라이언트 `VITE_SCHOOL_LINK_SECRET` 제거)에서 번들 비밀 제거=실수정 완료.
 - **③ 분산 rate limit**: 현재 인스턴스 로컬(베스트에포트) → 운영은 Vercel KV/WAF 필요. `signup`(service_role 계정생성)도 IP/토큰별 제한 권장.
 
 ## 7. 미완료 / 다음 후보

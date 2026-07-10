@@ -7,6 +7,7 @@ import { SCHOOL } from '../data/location'
 import { students } from '../data/mock'
 import { supabase, SUPABASE_ENABLED } from '../data/supabaseClient'
 import { verifyLoginToken, serverSignupNurse } from '../data/tokenApi'
+import { setTokenAuth, clearKeyCache } from '../data/schoolCrypto'
 
 export { SUPABASE_ENABLED }
 
@@ -210,6 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loginToken: async (token, info) => {
         const p = await verifyLoginToken<TokenPayload>(token)
         if (!p || (p.r !== 't' && p.r !== 'p')) return '토큰이 올바르지 않습니다. 보건교사에게 다시 받아주세요.'
+        setTokenAuth(token) // 서명 토큰이면 /api/keys 권한 증명용으로 저장
         if (p.r === 't') {
           if (info.grade !== p.g || info.classNo !== p.c) return '학년·반이 토큰과 일치하지 않습니다.'
           const s: Session = {
@@ -293,6 +295,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return null
       },
       logout: () => {
+        clearKeyCache() // 스코프 키·토큰 캐시 제거
         if (SUPABASE_ENABLED && supabase) {
           cacheTokenSession(null) // 교사/학부모 토큰 세션
           cacheSession(null)
