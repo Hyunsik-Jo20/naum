@@ -47,6 +47,25 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
+    build: {
+      rollupOptions: {
+        output: {
+          // 단일 540KB 번들을 독립 캐시·병렬 로드 가능한 청크로 분리.
+          //  · vendor-react/supabase: 앱 배포마다 안 바뀜 → 재방문 시 캐시 적중.
+          //  · data-busan: 642개교 명단·교육청 합성지표(무거움) → 앱 코어에서 떼내 병렬 로드.
+          manualChunks(id) {
+            if (/[\\/]node_modules[\\/]/.test(id)) {
+              if (/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id))
+                return 'vendor-react'
+              if (id.includes('@supabase')) return 'vendor-supabase'
+              return 'vendor'
+            }
+            if (/[\\/]data[\\/](busanSchools|eduMock|surveillance|monthly)\b/.test(id)) return 'data-busan'
+            return undefined
+          },
+        },
+      },
+    },
     server: {
       port: 5173,
       proxy: {

@@ -76,7 +76,15 @@ git push           # → Vercel 자동 재배포
 - **솔라피 SMS/알림톡 연동**: 승인 제출용 템플릿 문구 완료 → **[docs/SOLAPI_TEMPLATES.md](SOLAPI_TEMPLATES.md)**(학부모 5개 T1~T5 + 담임 5개 T6~T10, 결과별 분리, 변수 `#{}`). 발신번호 등록 + 카카오 템플릿 심사 진행 후 → `/api/sms`(키 서버보관) + 처치알림 발송 + 발신번호 교사별. 휴대폰 OTP 로그인도 솔라피+Supabase Send SMS Hook으로 후속.
 - ~~relay 재연결/오프라인 큐 보강~~ **(완료, 2026-07-10 — 6-1 참고)**.
 - ~~토큰 보안 강화(서버 서명)~~ **(코드 완료, 2026-07-10 — 6-2 참고)**. **배포 시 0008 + Vercel 환경변수 적용 필요**([SUPABASE_SETUP.md](SUPABASE_SETUP.md) §5-1). 미적용이면 기존 로컬 방식으로 폴백(앱 정상, 강화 미적용).
-- 공식 재난 API(승인 대기), 번들 추가 최적화.
+- ~~번들 추가 최적화~~ **(완료, 2026-07-10 — 6-3 참고)**.
+- 공식 재난 API(승인 대기), 솔라피 SMS 실연동(카카오 템플릿 승인 후).
+
+## 6-3. 최근 추가(2026-07-10) — 번들 청크 분리(초기 로딩 최적화)
+- **문제**: 메인 번들이 단일 540KB(gzip 153KB) — react·supabase·642개교 데이터·앱 코어가 한 덩어리 → 앱 코드만 바뀌어도 재방문 시 전체 재다운로드.
+- **해결**(`vite.config.ts` `build.rollupOptions.output.manualChunks`): vendor-react / vendor-supabase / vendor(기타) / data-busan(busanSchools·eduMock·surveillance·monthly) / 앱 코어(index)로 분리.
+  - **앱 코어 index 540KB → 93KB(gzip 29KB)**. vendor·data 청크는 앱 배포마다 안 바뀌어 **재방문 시 캐시 적중**(대부분 배포에서 ~93KB만 재다운로드) + 병렬 로드. 500KB 경고 해소.
+- **검증**: 프로덕션 빌드(`npm run preview`, :4173) 부팅 무에러 + 로그인(eager: index·vendor-react·vendor-supabase) + 교육청 대시보드(lazy Edu + data-busan) 렌더 확인. (프리뷰 실행: launch.json에 `naum-preview` 추가.)
+- **미해결(후속)**: 642개교 데이터가 전역 스토어(notices·schools)에 정적 의존해 **eager 상주**(초기 총량은 동일, 캐시·병렬만 개선). 완전 지연로딩은 스토어를 비동기 초기화로 바꾸는 리팩터 필요(동작 변경 리스크 → 별도 과제).
 
 ## 6-2. 최근 추가(2026-07-10) — 토큰 보안 강화(서버 서명 게이트)
 - **문제**: 토큰이 클라이언트 번들의 `VITE_SCHOOL_LINK_SECRET` 파생이라 **위조 가능**했고, 보건교사 가입이 클라이언트 `signUp(role 메타)`라 **토큰 없이 자칭 가입** 가능(권한 상승 구멍).
