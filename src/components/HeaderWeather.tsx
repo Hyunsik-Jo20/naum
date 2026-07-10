@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchCurrent, type CurrentWeather } from '../data/weatherApi'
 import { deriveAlerts } from '../data/disasters'
+import { useOfficialAlerts } from '../data/useOfficialAlerts'
 import { SCHOOL } from '../data/location'
 import { useNotices } from '../store/notices'
 import { pmGrade, pm25Grade } from '../data/weather'
@@ -8,6 +9,7 @@ import { pmGrade, pm25Grade } from '../data/weather'
 /** 상단바 제목줄에 들어가는 컴팩트 날씨·경보. 경보 발령 시 붉게 깜빡이고 공지 알람이 깜빡인다. */
 export default function HeaderWeather() {
   const { thresholds, openCompose } = useNotices()
+  const official = useOfficialAlerts()
   const [wx, setWx] = useState<CurrentWeather | null>(null)
 
   useEffect(() => {
@@ -23,7 +25,7 @@ export default function HeaderWeather() {
 
   if (!wx) return <span className="spacer" />
 
-  const alerts = deriveAlerts(wx, SCHOOL.name, thresholds)
+  const alerts = [...official, ...deriveAlerts(wx, SCHOOL.name, thresholds)]
   const sev = alerts.some((a) => a.severity === 'danger') ? 'danger' : alerts.length ? 'warn' : ''
   const pm10g = pmGrade(wx.pm10)
   const pm25g = pm25Grade(wx.pm25)

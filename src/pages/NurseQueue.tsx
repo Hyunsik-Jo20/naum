@@ -12,6 +12,7 @@ import DisasterStrip from '../components/DisasterStrip'
 import { loadNotifyTargets, saveNotifyTargets } from '../data/notifyTargets'
 import { fetchCurrent, type CurrentWeather } from '../data/weatherApi'
 import { deriveAlerts } from '../data/disasters'
+import { useOfficialAlerts } from '../data/useOfficialAlerts'
 import { SCHOOL } from '../data/location'
 import { pushNotify } from '../push'
 import type { Student, Visit } from '../types'
@@ -64,7 +65,8 @@ export default function NurseQueue() {
     return () => { ok = false; window.clearInterval(t) }
   }, [])
 
-  const alerts = wx ? deriveAlerts(wx, SCHOOL.name, thresholds) : []
+  const official = useOfficialAlerts()
+  const alerts = [...official, ...(wx ? deriveAlerts(wx, SCHOOL.name, thresholds) : [])]
 
   // 새 위험 경보가 뜨면 보건교사에게 로컬 푸시(하루 1회, 제목 기준 중복 방지).
   useEffect(() => {

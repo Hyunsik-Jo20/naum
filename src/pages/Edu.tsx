@@ -14,6 +14,7 @@ import SchoolMap, { type AirAlert } from '../components/SchoolMap'
 import type { CurrentWeather } from '../data/weatherApi'
 import { deriveAlerts, type DisasterAlert } from '../data/disasters'
 import DisasterStrip from '../components/DisasterStrip'
+import { useOfficialAlerts } from '../data/useOfficialAlerts'
 import TrendChart from '../components/TrendChart'
 import SchoolDetail from '../components/SchoolDetail'
 import InfectionPanel from '../components/InfectionPanel'
@@ -57,10 +58,11 @@ export default function Edu() {
   const [showNurseToken, setShowNurseToken] = useState(false)
   const { schools: allSchools } = useSchools()
   const { openCompose, sent, autoEvaluate, thresholds } = useNotices()
+  const official = useOfficialAlerts()
 
   const alerts: DisasterAlert[] = useMemo(
-    () => (refAir ? deriveAlerts(refAir, `${EDU_WX.name} 인근`, thresholds) : []),
-    [refAir, thresholds],
+    () => [...official, ...(refAir ? deriveAlerts(refAir, `${EDU_WX.name} 인근`, thresholds) : [])],
+    [official, refAir, thresholds],
   )
 
   // 자동 공지 규칙 평가(경보 발생 시 자동 발송)
