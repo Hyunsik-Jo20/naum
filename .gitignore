@@ -7,3 +7,5 @@ server/.data
 .vscode/*
 !.vscode/extensions.json
 .vercel
+# Office/OneDrive 임시 잠금 파일
+~$*
