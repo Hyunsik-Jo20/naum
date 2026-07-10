@@ -56,7 +56,7 @@
 | 0005_app_state | 학교설정 공유저장 | ✅ |
 | 0006_visit_observe | `observe_until` 컬럼(관찰) | ✅ (201 확인) |
 | 0007_visit_delete | 방문 삭제 RLS | ✅ (authenticated DELETE 204 확인) |
-| 0008_role_from_app_meta | 가입 role을 app_metadata에서만 신뢰(무단 보건교사 가입 차단) | ⏳ **미적용** — `api/token.js` 환경변수와 **함께** 배포. 절차: [SUPABASE_SETUP.md](SUPABASE_SETUP.md) §5-1 |
+| 0008_role_from_app_meta | 가입 role을 app_metadata에서만 신뢰(무단 보건교사 가입 차단) | ✅ **적용+env 설정 완료(2026-07-11)** — `/api/token` 400(≠501) 확인 = 토큰 게이트 활성. 신규 보건교사 가입은 서버 생성(role=nurse) |
 | 0009_rls_staff_scope | visits·visit_links 조회/수정/삭제·app_state 쓰기를 nurse/edu 역할로 제한(`is_staff()`) | ⏳ **미적용** — 적용 전 스테이징 테스트 권장(콘솔 조회·키오스크 접수·교사/학부모 수신) |
 
 ## 6. 실행/빌드
@@ -83,7 +83,7 @@ git push           # → Vercel 자동 재배포
 
 **남은 항목(위험도순, 결정·인프라 필요)**:
 - **① RLS 정책 느슨(중)**: **일부 조치 — `0009_rls_staff_scope.sql` 작성**(visits·visit_links 조회/수정/삭제·app_state 쓰기를 nurse/edu로 제한). **적용은 사용자가 스테이징 테스트 후 진행.** 유지된 부분(키오스크 anon INSERT, 교사/학부모 anon relay SELECT)은 기능상 필요+E2E로 방어. 남은 후속: school_id 다학교 스코프, anon insert 크기/횟수 제한.
-- **② 학교 비밀 번들 노출(중~높)**: **Phase 1 구현 완료** — `api/keys.js`(서버 발급 스코프 키)+`schoolCrypto.ts`(서버 우선·로컬 폴백·localStorage 캐시). 파생 알고리즘 동일이라 재암호화 불필요. 검증: 서버-클라이언트 파생 일치 16종 + 폴백 라운드트립 통과. **적용은 사용자가 [SUPABASE_SETUP §5-2](SUPABASE_SETUP.md) 2단계로**: Phase 1(`SCHOOL_MASTER_SECRET` env=기존값) → 확인 후 Phase 2(클라이언트 `VITE_SCHOOL_LINK_SECRET` 제거)에서 번들 비밀 제거=실수정 완료.
+- **② 학교 비밀 번들 노출(중~높)**: **Phase 1 배포 완료(2026-07-11)** — `SCHOOL_MASTER_SECRET` env 설정됨(`/api/keys` 403≠501 확인). 이제 서버 발급 키 사용. **남은 것 = Phase 2**: 이름복원·교사/학부모 알림 정상 확인 후 클라이언트 `VITE_SCHOOL_LINK_SECRET` **제거+재배포** → 번들에서 마스터 비밀 사라짐 = 실제 수정 완료. ([SUPABASE_SETUP §5-2](SUPABASE_SETUP.md))
 - **③ 분산 rate limit**: 현재 인스턴스 로컬(베스트에포트) → 운영은 Vercel KV/WAF 필요. `signup`(service_role 계정생성)도 IP/토큰별 제한 권장.
 
 ## 7. 미완료 / 다음 후보
