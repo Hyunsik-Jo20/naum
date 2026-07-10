@@ -1,16 +1,23 @@
 // 교육청 → 보건교사 "가입 토큰" 발급. 보건교사는 이 토큰으로 최초 1회 회원가입(이메일·비번 등록).
 //  토큰 = 학교 키 암호문(자체완결, 서버 미저장). 학교명을 넣으면 가입 시 소속으로 적용.
 import { useState } from 'react'
-import { issueLoginToken } from '../data/schoolCrypto'
+import { issueLoginToken } from '../data/tokenApi'
 
 export default function EduNurseTokenModal({ onClose }: { onClose: () => void }) {
   const [org, setOrg] = useState('')
+  const [secret, setSecret] = useState('')
   const [token, setToken] = useState('')
   const [copied, setCopied] = useState(false)
+  const [err, setErr] = useState('')
 
   async function gen() {
     setCopied(false)
-    setToken(await issueLoginToken({ r: 'n', org: org.trim() }))
+    setErr('')
+    try {
+      setToken(await issueLoginToken({ r: 'n', org: org.trim() }, { eduSecret: secret.trim() || undefined }))
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '토큰 발급에 실패했습니다.')
+    }
   }
   async function copy() {
     try {
@@ -37,9 +44,15 @@ export default function EduNurseTokenModal({ onClose }: { onClose: () => void })
         <label className="login-field">학교명 (선택 — 가입 시 소속으로 적용)
           <input value={org} placeholder="예: 주감초등학교" onChange={(e) => { setOrg(e.target.value); setToken('') }} />
         </label>
+        <label className="login-field">발급 비밀번호 (서버 보안 설정 시 — 교육청 계정으로 로그인했다면 생략)
+          <input type="password" value={secret} placeholder="서버 EDU_ISSUE_SECRET" autoComplete="off"
+            onChange={(e) => { setSecret(e.target.value); setToken('') }} />
+        </label>
         <button className="btn primary" style={{ width: '100%', justifyContent: 'center' }} onClick={gen}>
           <i className="ti ti-key" aria-hidden="true" /> 가입 토큰 생성
         </button>
+
+        {err && <div className="ai-err" style={{ marginTop: 10 }}>{err}</div>}
 
         {token && (
           <div style={{ marginTop: 12 }}>

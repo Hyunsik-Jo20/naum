@@ -6,7 +6,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { SCHOOL } from '../data/location'
 import { students } from '../data/mock'
 import { supabase, SUPABASE_ENABLED } from '../data/supabaseClient'
-import { decodeLoginToken } from '../data/schoolCrypto'
+import { verifyLoginToken, serverSignupNurse } from '../data/tokenApi'
 
 export { SUPABASE_ENABLED }
 
@@ -208,7 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       // 교사·학부모 토큰 로그인 — 토큰 복호 + 입력 정보 매칭 → 로컬 세션.
       loginToken: async (token, info) => {
-        const p = await decodeLoginToken<TokenPayload>(token)
+        const p = await verifyLoginToken<TokenPayload>(token)
         if (!p || (p.r !== 't' && p.r !== 'p')) return '토큰이 올바르지 않습니다. 보건교사에게 다시 받아주세요.'
         if (p.r === 't') {
           if (info.grade !== p.g || info.classNo !== p.c) return '학년·반이 토큰과 일치하지 않습니다.'
@@ -233,10 +233,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // 보건교사 회원가입 — 교육청 가입 토큰 검증 후 Supabase 계정 생성(role=nurse 프로필 자동).
       signupNurse: async (token, info) => {
         if (!supabase) return '클라우드 인증이 설정되지 않았습니다.'
-        const p = await decodeLoginToken<TokenPayload>(token)
-        if (!p || p.r !== 'n') return '가입 토큰이 올바르지 않습니다. 교육청에서 받은 토큰을 확인하세요.'
         if (!info.email.trim() || !info.password) return '이메일과 비밀번호를 입력하세요.'
         if (info.password.length < 6) return '비밀번호는 6자 이상으로 설정하세요.'
+        // 서버 서명 토큰이면 서버(service-role)가 검증+계정 생성 → 무단 자칭 가입 차단.
+        const srv = await serverSignupNurse(token, info.email.trim(), info.password, info.name.trim())
+        if (srv.ok) return null
+        if (srv.error === 'exists') return '이미 가입된 이메일입니다. 기존 비밀번호로 로그인하세요.'
+        if (srv.error === 'bad_token') return '가입 토큰이 올바르지 않습니다. 교육청에서 받은 토큰을 확인하세요.'
+        if (!srv.fellBack) return srv.error === 'network' ? '네트워크 오류로 가입에 실패했습니다.' : `가입 실패: ${srv.error}`
+        // 폴백(서버 미설정 or 레거시 토큰): 기존 클라이언트 검증 + signUp.
+        const p = await verifyLoginToken<TokenPayload>(token)
+        if (!p || p.r !== 'n') return '가입 토큰이 올바르지 않습니다. 교육청에서 받은 토큰을 확인하세요.'
         const { data, error } = await supabase.auth.signUp({
           email: info.email.trim(),
           password: info.password,

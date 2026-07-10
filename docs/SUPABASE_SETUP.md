@@ -86,6 +86,22 @@ VITE_SUPABASE_ANON_KEY=eyJ...
    - `/api/*` 서버리스 함수가 data.go.kr 프록시(serviceKey 서버 주입)를 담당 → 개발 Vite 프록시와 동일.
 5. **카카오 도메인 등록**: Kakao Developers → 앱 → 플랫폼 → Web 사이트 도메인에 `https://<프로젝트>.vercel.app` 추가(지도 로드에 필수).
 
+## 5-1. 토큰 서버 게이트(보안 강화) — `api/token.js`
+> **왜**: 예전 토큰은 클라이언트 번들의 `VITE_SCHOOL_LINK_SECRET`에서 파생 → 번들에서 비밀을 꺼내 **가입/로그인 토큰 위조 가능**했고, 보건교사 가입이 클라이언트 `signUp(role 메타)`라 **토큰 없이도 자칭 가입**이 됐다. 이를 서버 HMAC 서명 + service-role 가입 게이트로 차단한다.
+> **아래 3개(0008 마이그레이션 + 환경변수)를 함께 배포**해야 완성된다. 미설정 시 서버가 501을 반환 → 클라이언트가 기존 로컬 동작으로 폴백(앱은 안 깨짐)하지만 **보안 강화는 적용 안 됨**.
+
+1. **마이그레이션 0008 적용**: `supabase/migrations/0008_role_from_app_meta.sql` 실행 → 가입 트리거가 role을 **`app_metadata`(service_role만 설정 가능)** 에서만 읽고, 없으면 최소권한 `teacher`. (클라이언트 `signUp`의 role 메타는 무시됨 → 무단 보건교사 가입 차단.)
+2. **Vercel 환경변수 추가**(모두 **서버 전용**, VITE_ 없음):
+   | 키 | 값 | 비고 |
+   |---|---|---|
+   | `TOKEN_SIGNING_SECRET` | 긴 무작위 문자열 | 토큰 HMAC 서명 키(서버만 보유, 번들 미포함) |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Supabase `service_role` 키 | 가입 계정 생성(admin API)용. **절대 클라이언트 노출 금지** |
+   | `EDU_ISSUE_SECRET` | 긴 무작위 문자열(선택) | 교육청이 데모(계정 없이) 가입토큰 발급 시 입력하는 발급 비밀. 실계정(role=edu)이 있으면 불필요 |
+   - `SUPABASE_URL`/`SUPABASE_ANON_KEY`는 없으면 함수가 `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`를 자동 사용(별도 등록 불필요).
+3. **(권장) 공개 signUp 차단**: Supabase → Authentication → Providers → Email → "Allow new users to sign up" **OFF**. `api/token.js`의 admin 생성은 이 설정과 무관하게 동작하므로, 정상 가입은 유지되고 우회 가입만 막힌다.
+- 발급 권한: **로그인 토큰(교사·학부모)** = 보건교사 로그인 세션(JWT role=nurse) 필요 / **가입 토큰(보건교사)** = 교육청 계정(role=edu) 또는 `EDU_ISSUE_SECRET`.
+- 검증: 교사·학부모 토큰 로그인·보건교사 가입은 서버가 HMAC 검증. `v1.` 접두 토큰은 서버 검증 필수(위조 불가), 예전(레거시) 토큰은 서버 미설정 환경에서만 로컬 복호.
+
 ## 6. 점검 체크리스트
 - [ ] 로그인(이메일+비밀번호) 성공 → 역할별 화면 진입
 - [ ] 키오스크 접수 → 콘솔 대기열 즉시 반영(Realtime)

@@ -43,8 +43,8 @@
 - 교육청 대시보드(지도·KPI·감염병 조기탐지·AI보고), **학교 설정 영구저장**(`app_state`)·추가학교 **"임시" 표시**
 - 교장 보고(일일 자동마감·보건일지 엑셀)
 
-## 5. Supabase 마이그레이션 상태 (전부 적용 완료)
-`supabase/migrations/` 0001~0007 **모두 적용 확인됨(2026-06-24)**. 새 세션에서 마이그레이션 추가 시 0008부터.
+## 5. Supabase 마이그레이션 상태
+`supabase/migrations/` 0001~0007 **적용 확인됨(2026-06-24)**. **0008은 미적용 — 토큰 서버 게이트와 함께 적용 필요**(아래).
 | 파일 | 내용 | 상태 |
 |---|---|---|
 | 0001_init | profiles·visits·relay + RLS | ✅ |
@@ -54,6 +54,7 @@
 | 0005_app_state | 학교설정 공유저장 | ✅ |
 | 0006_visit_observe | `observe_until` 컬럼(관찰) | ✅ (201 확인) |
 | 0007_visit_delete | 방문 삭제 RLS | ✅ (authenticated DELETE 204 확인) |
+| 0008_role_from_app_meta | 가입 role을 app_metadata에서만 신뢰(무단 보건교사 가입 차단) | ⏳ **미적용** — `api/token.js` 환경변수와 **함께** 배포. 절차: [SUPABASE_SETUP.md](SUPABASE_SETUP.md) §5-1 |
 
 ## 6. 실행/빌드
 ```
@@ -74,7 +75,14 @@ git push           # → Vercel 자동 재배포
 ## 7. 미완료 / 다음 후보
 - **솔라피 SMS/알림톡 연동**: 승인 제출용 템플릿 문구 완료 → **[docs/SOLAPI_TEMPLATES.md](SOLAPI_TEMPLATES.md)**(학부모 5개 T1~T5 + 담임 5개 T6~T10, 결과별 분리, 변수 `#{}`). 발신번호 등록 + 카카오 템플릿 심사 진행 후 → `/api/sms`(키 서버보관) + 처치알림 발송 + 발신번호 교사별. 휴대폰 OTP 로그인도 솔라피+Supabase Send SMS Hook으로 후속.
 - ~~relay 재연결/오프라인 큐 보강~~ **(완료, 2026-07-10 — 6-1 참고)**.
-- 공식 재난 API(승인 대기), 토큰 보안 강화(서버 서명), 번들 추가 최적화.
+- ~~토큰 보안 강화(서버 서명)~~ **(코드 완료, 2026-07-10 — 6-2 참고)**. **배포 시 0008 + Vercel 환경변수 적용 필요**([SUPABASE_SETUP.md](SUPABASE_SETUP.md) §5-1). 미적용이면 기존 로컬 방식으로 폴백(앱 정상, 강화 미적용).
+- 공식 재난 API(승인 대기), 번들 추가 최적화.
+
+## 6-2. 최근 추가(2026-07-10) — 토큰 보안 강화(서버 서명 게이트)
+- **문제**: 토큰이 클라이언트 번들의 `VITE_SCHOOL_LINK_SECRET` 파생이라 **위조 가능**했고, 보건교사 가입이 클라이언트 `signUp(role 메타)`라 **토큰 없이 자칭 가입** 가능(권한 상승 구멍).
+- **해결**: `api/token.js`(Vercel 서버리스, 서버 전용 비밀) — ① **발급**: 호출자 역할 확인(로그인토큰=보건교사 JWT / 가입토큰=교육청 role=edu 또는 `EDU_ISSUE_SECRET`) 후 **HMAC 서명**(만료 포함) ② **가입**: 가입토큰 HMAC 검증 후 **service-role로 계정 생성**, role을 **app_metadata(클라 조작 불가)** 로 지정 ③ **검증**: 교사·학부모 로그인 토큰 HMAC 검증. `0008`이 트리거 role 출처를 app_metadata로 바꿔 우회 가입 차단.
+- **클라이언트**(`data/tokenApi.ts`): `v1.` 서명 토큰은 서버 검증 필수(위조 불가), 서버 미설정(501)/네트워크 시 **레거시 로컬 폴백**(데모·기존 배포 무중단). 발급 권한 거부(403)는 폴백 없이 에러 전파. `auth.tsx`(loginToken·signupNurse)·`LoginTokenModal`·`EduNurseTokenModal`(발급 비밀 입력란·에러표시) 연동.
+- **검증**: 실제 `api/token.js` 핸들러 13종 통과(HMAC 라운드트립·변조/만료/타비밀 위조 거부·발급/가입 게이팅·501 폴백·405) + dev 폴백 라운드트립(발급→검증) 확인 + 빌드 통과.
 - 연수 데이터 정리: `delete from public.visits; delete from public.visit_links; delete from public.relay_class_inbox; delete from public.relay_student_inbox;`
 
 ## 8. 핵심 파일 지도 (이번 세션 추가분)

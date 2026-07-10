@@ -2,7 +2,7 @@
 //  담임: 학년/반 토큰 / 학부모: 학생 토큰. 토큰은 학교 키로 암호화된 자체완결 코드(서버 미저장).
 import { useMemo, useState } from 'react'
 import { classes, studentsInClass } from '../data/mock'
-import { issueLoginToken } from '../data/schoolCrypto'
+import { issueLoginToken } from '../data/tokenApi'
 
 type Tab = 'teacher' | 'parent'
 
@@ -19,16 +19,22 @@ export default function LoginTokenModal({ onClose }: { onClose: () => void }) {
   const [studentId, setStudentId] = useState('')
   const [token, setToken] = useState('')
   const [copied, setCopied] = useState(false)
+  const [err, setErr] = useState('')
 
   async function gen() {
     setCopied(false)
+    setErr('')
     const cls = classNos.includes(classNo) ? classNo : classNos[0]
-    if (tab === 'teacher') {
-      setToken(await issueLoginToken({ r: 't', g: grade, c: cls }))
-    } else {
-      const s = roster.find((x) => x.id === studentId) ?? roster[0]
-      if (!s) return
-      setToken(await issueLoginToken({ r: 'p', sid: s.id, n: s.name }))
+    try {
+      if (tab === 'teacher') {
+        setToken(await issueLoginToken({ r: 't', g: grade, c: cls }))
+      } else {
+        const s = roster.find((x) => x.id === studentId) ?? roster[0]
+        if (!s) return
+        setToken(await issueLoginToken({ r: 'p', sid: s.id, n: s.name }))
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : '토큰 발급에 실패했습니다.')
     }
   }
   async function copy() {
@@ -88,6 +94,8 @@ export default function LoginTokenModal({ onClose }: { onClose: () => void }) {
         <button className="btn primary" style={{ width: '100%', justifyContent: 'center' }} disabled={tab === 'parent' && !studentId && roster.length > 0 ? false : false} onClick={gen}>
           <i className="ti ti-key" aria-hidden="true" /> 토큰 생성
         </button>
+
+        {err && <div className="ai-err" style={{ marginTop: 10 }}>{err}</div>}
 
         {token && (
           <div style={{ marginTop: 12 }}>
