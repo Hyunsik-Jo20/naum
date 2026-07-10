@@ -8,7 +8,6 @@ import AddVisitModal from '../components/AddVisitModal'
 import LoginTokenModal from '../components/LoginTokenModal'
 import ObserveResolveModal from '../components/ObserveResolveModal'
 import ObservePickerModal from '../components/ObservePickerModal'
-import DisasterStrip from '../components/DisasterStrip'
 import { loadNotifyTargets, saveNotifyTargets } from '../data/notifyTargets'
 import { fetchCurrent, type CurrentWeather } from '../data/weatherApi'
 import { deriveAlerts } from '../data/disasters'
@@ -31,7 +30,7 @@ function symptomText(v: Visit): string {
 
 export default function NurseQueue() {
   const { visits, addVisit, startTreating, completeVisit, updateVisit, deleteVisit, studentOf } = useVisits()
-  const { nurseInbox, clearNurseInbox, thresholds, openCompose } = useNotices()
+  const { nurseInbox, clearNurseInbox, thresholds } = useNotices()
   const [wx, setWx] = useState<CurrentWeather | null>(null)
   const notifiedAlerts = useRef<Set<string>>(new Set())
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -193,14 +192,6 @@ export default function NurseQueue() {
             >
               <i className="ti ti-device-tablet" aria-hidden="true" /> 학생 키오스크 새 탭으로 열기
             </a>
-          </div>
-
-          {/* 재난·기상 경보 — 콘솔에도 표시(위험 경보 시 로컬 푸시) */}
-          <div style={{ marginTop: 12 }}>
-            <DisasterStrip
-              alerts={alerts}
-              onNotify={(a) => openCompose({ title: `[긴급] ${a.title}`, body: a.detail, to: '교육청' })}
-            />
           </div>
 
           {/* 받은 공지·알림 — 담임·학부모 메시지 + 교육청 공지·경보 */}

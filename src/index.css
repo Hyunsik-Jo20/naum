@@ -726,6 +726,7 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
 
 /* 상단바 컴팩트 날씨·경보 (보건교사 콘솔) */
 .hdr-wx {
+  position: relative;
   flex: 1;
   display: flex;
   align-items: center;
@@ -739,14 +740,10 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
 }
 .hdr-wx .hwx { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .hdr-wx .hwx i { color: var(--text-3); }
-.hdr-wx.warn, .hdr-wx.danger { color: var(--danger); font-weight: 600; }
-.hdr-wx.warn { animation: wxflash 1.4s ease-in-out infinite; }
-.hdr-wx.danger { animation: wxflash 0.85s ease-in-out infinite; }
-.hdr-wx.warn .hwx i, .hdr-wx.danger .hwx i { color: var(--danger); }
-@keyframes wxflash {
-  0%, 100% { background: transparent; }
-  50% { background: var(--danger-bg); }
-}
+/* 심각도 배경(깜빡임 없음): 경보없음=초록, 주의보=주황, 경보=붉은 반투명 */
+.hdr-wx.sev-ok { background: var(--success-bg); }
+.hdr-wx.sev-warn { background: var(--warning-bg); }
+.hdr-wx.sev-danger { background: var(--danger-bg); }
 .hdr-alarm {
   display: inline-flex;
   align-items: center;
@@ -754,16 +751,20 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
   font-size: 13px;
   font-weight: 700;
   color: #fff;
-  background: var(--danger);
   border: none;
   border-radius: 999px;
   padding: 4px 12px;
   cursor: pointer;
-  animation: alarmflash 0.8s ease-in-out infinite;
 }
-@keyframes alarmflash {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.95); }
+.hdr-alarm.sev-ok { background: var(--success); }
+.hdr-alarm.sev-warn { background: var(--warning); }
+.hdr-alarm.sev-danger { background: var(--danger); }
+/* 상단바 경보 펼침 패널 */
+.hdr-wx-panel {
+  position: absolute; top: 100%; right: 0; margin-top: 6px; z-index: 50;
+  width: min(420px, 92vw); max-height: 62vh; overflow-y: auto;
+  background: var(--surface); border: 0.5px solid var(--border-2); border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14); padding: 8px;
 }
 .app-shell.wide .queue-3 .col-head {
   position: sticky;
