@@ -57,6 +57,7 @@
 | 0006_visit_observe | `observe_until` 컬럼(관찰) | ✅ (201 확인) |
 | 0007_visit_delete | 방문 삭제 RLS | ✅ (authenticated DELETE 204 확인) |
 | 0008_role_from_app_meta | 가입 role을 app_metadata에서만 신뢰(무단 보건교사 가입 차단) | ⏳ **미적용** — `api/token.js` 환경변수와 **함께** 배포. 절차: [SUPABASE_SETUP.md](SUPABASE_SETUP.md) §5-1 |
+| 0009_rls_staff_scope | visits·visit_links 조회/수정/삭제·app_state 쓰기를 nurse/edu 역할로 제한(`is_staff()`) | ⏳ **미적용** — 적용 전 스테이징 테스트 권장(콘솔 조회·키오스크 접수·교사/학부모 수신) |
 
 ## 6. 실행/빌드
 ```
@@ -81,7 +82,7 @@ git push           # → Vercel 자동 재배포
 - **rate limit + 캐시**: proxy 200 응답 **CDN 캐시**(s-maxage=300)로 상류 쿼터 절감 + **IP 버스트 제한**(인스턴스 로컬 300/분, 베스트에포트). 검증: 실핸들러 8종 통과(404/400/403/200+캐시/무-Referer 통과/429/오류 무캐시).
 
 **남은 항목(위험도순, 결정·인프라 필요)**:
-- **① RLS 정책 과도하게 느슨(중)**: 전 테이블 RLS는 ON이나 정책이 `using(true)`/anon insert. `visits`·`app_state`를 아무 authenticated가 전체 수정/삭제, `relay_*`·`visits`에 anon 삽입 가능(비식별+E2E라 조회 노출은 없으나 무결성·스팸 위험). → 마이그레이션 0009로 school_id 스코프 + 쓰기 역할 제한(앱 동작 영향 있어 신중).
+- **① RLS 정책 느슨(중)**: **일부 조치 — `0009_rls_staff_scope.sql` 작성**(visits·visit_links 조회/수정/삭제·app_state 쓰기를 nurse/edu로 제한). **적용은 사용자가 스테이징 테스트 후 진행.** 유지된 부분(키오스크 anon INSERT, 교사/학부모 anon relay SELECT)은 기능상 필요+E2E로 방어. 남은 후속: school_id 다학교 스코프, anon insert 크기/횟수 제한.
 - **② 학교 비밀 번들 노출(중~높)**: `VITE_SCHOOL_LINK_SECRET`이 클라이언트 번들에 포함(E2E 마스터 키). → 서버 발급 사용자별 키 교환으로 전환(대형 후속, 이미 문서화).
 - **③ 분산 rate limit**: 현재 인스턴스 로컬(베스트에포트) → 운영은 Vercel KV/WAF 필요. `signup`(service_role 계정생성)도 IP/토큰별 제한 권장.
 
