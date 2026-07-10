@@ -1,7 +1,7 @@
 # 나음(NaUM) — 다음 세션 이어가기 (핸드오프)
 
 > **새 세션은 이 파일부터 읽으세요.** 상세 이력은 [PROGRESS.md](PROGRESS.md), 배포·계정은 [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
-> 최종 업데이트: 2026-06-24
+> 최종 업데이트: 2026-06-24 (알림 대상 선택·담임 명부 업로드 추가)
 
 ## 0. 한 줄 요약
 보건실 디지털 전환 플랫폼. 학생 키오스크 셀프접수 → 보건교사 콘솔 처치 → 담임·학부모 알림 → 교육청 비식별 대시보드.
@@ -35,25 +35,25 @@
 - **체온 측정 모달**(±0.3 점프 + 3연속값 0.1 미세) → "체온 측정 37.5℃"
 - **관찰 결과**: 10분단위 시간선택 → 완료패널 "관찰 중·남은분" → 종료 시 깜빡임+"교실 복귀 →" 클릭 시 교실복귀 전환 + 담임 추가알림
 - **방문 삭제**(대기 ✕ / 처치 삭제버튼), **콘솔 일일 초기화**(오늘 건만 표시)
+- **알림 대상 선택**(콘솔 "알림 대상 ☑담임 ☑학부모", 기본 둘 다 → 접수/종료 relay 발신 게이팅. `data/notifyTargets`)
+- **명부 업로드**(`/roster`): 학생 명부(학년·반·번호·이름·성별·**보호자연락처**=학부모정보) + **담임 명부**(학년·반·담임명·연락처, `data/teacherRoster`) — 둘 다 엑셀/CSV, 로컬 저장. 처치 화면에 담임 이름·연락처 표시.
 - **학부모/담임 알림 구조화**(`notifyText.buildParentMessage/buildTeacherLine`: 증상·병명·처치·결과)
 - **다기기 이름복원**(암호화 링크 `visit_links`), **relay 클라우드**(토큰+암호문, 교사 반키·학부모 학생키 복호화)
 - **오프라인 + 설치형 PWA**(서비스워커 앱셸 캐시 + 아웃박스 큐 재연결 업로드 + "앱 설치" 버튼)
 - 교육청 대시보드(지도·KPI·감염병 조기탐지·AI보고), **학교 설정 영구저장**(`app_state`)·추가학교 **"임시" 표시**
 - 교장 보고(일일 자동마감·보건일지 엑셀)
 
-## 5. ⚠️ Supabase 마이그레이션 실행 상태 (SQL Editor에서 실행)
-`supabase/migrations/` 순서대로. **새 세션 시작 시 0006·0007 적용 여부 먼저 확인**(미적용이면 해당 기능이 클라우드 영속 안 됨, graceful fallback).
+## 5. Supabase 마이그레이션 상태 (전부 적용 완료)
+`supabase/migrations/` 0001~0007 **모두 적용 확인됨(2026-06-24)**. 새 세션에서 마이그레이션 추가 시 0008부터.
 | 파일 | 내용 | 상태 |
 |---|---|---|
-| 0001_init | profiles·visits·relay + RLS | ✅ 적용 |
-| 0002_fix_policies | RLS 보정 | ✅ 적용 |
-| 0003_links_relay | visit_links + relay 정책 | ✅ 적용 |
-| 0004_relay_anon_select | 토큰로그인(anon) relay 조회 | ✅ 적용 |
-| 0005_app_state | 학교설정 공유저장 | ✅ 적용(테이블 존재 확인) |
-| 0006_visit_observe | `observe_until` 컬럼(관찰) | ❌ **미적용(확인됨) — 실행 필요** |
-| 0007_visit_delete | 방문 삭제 RLS | ❌ **미적용 추정 — 실행 필요**(0006과 함께) |
-
-> 2026-06-24 확인: 0006 미적용(관찰 종료시각이 클라우드에 저장 안 됨), 0007도 미적용 추정(삭제가 새로고침 시 되살아남). **0006·0007을 SQL Editor에서 실행하면 관찰·삭제가 완전 동작.**
+| 0001_init | profiles·visits·relay + RLS | ✅ |
+| 0002_fix_policies | RLS 보정 | ✅ |
+| 0003_links_relay | visit_links + relay 정책 | ✅ |
+| 0004_relay_anon_select | 토큰로그인(anon) relay 조회 | ✅ |
+| 0005_app_state | 학교설정 공유저장 | ✅ |
+| 0006_visit_observe | `observe_until` 컬럼(관찰) | ✅ (201 확인) |
+| 0007_visit_delete | 방문 삭제 RLS | ✅ (authenticated DELETE 204 확인) |
 
 ## 6. 실행/빌드
 ```
@@ -73,7 +73,7 @@ git push           # → Vercel 자동 재배포
 ## 8. 핵심 파일 지도 (이번 세션 추가분)
 - `src/store/visits.tsx` — 3모드 데이터계층(add/start/complete/update/**delete**Visit), 오프라인 캐시·아웃박스, 오늘필터는 NurseQueue
 - `src/store/auth.tsx` — 이메일+비번 / **토큰로그인(loginToken)** / **회원가입(signupNurse)** / 로그인유지 / 오프라인 세션캐시
-- `src/data/` — `supabaseClient` · `schoolCrypto`(키·토큰·로그인토큰) · `offline`(아웃박스) · `localStation` · `aiTriage` · `ai`(프롬프트) · `notifyText`
+- `src/data/` — `supabaseClient` · `schoolCrypto`(키·토큰·로그인토큰) · `offline`(아웃박스) · `localStation` · `aiTriage` · `ai`(프롬프트) · `notifyText` · **`notifyTargets`(알림 대상)** · `localRoster`(학생명부) · **`teacherRoster`(담임명부)** · `location`(SCHOOL=테스트초등학교)
 - `src/api/` — `supabaseBackend`(visits·links·delete·Realtime) · `supabaseRelay` · `backend`(Node)
 - `src/components/` — `TreatPanel`(AI·체온·관찰·삭제) · `TempPickerModal` · `ObservePickerModal` · `AiSettingsModal` · `LoginTokenModal`(보건교사→교사·학부모) · `EduNurseTokenModal`(교육청→보건교사) · `SyncStatus` · `InstallButton` · `SchoolAdminPanel`(임시·영구저장)
 - `api/proxy.js` + `vercel.json`(rewrite) — data.go.kr 프록시(서버 키). `api/health.js`.
