@@ -1,5 +1,6 @@
-// 재난·기상 경보. 실시간 기상으로 판정(미세먼지·호우·폭염·한파).
-// 태풍·홍수·지진 등 공식 특보는 기상청 특보/지진·행안부 재난문자 연동 자리(fetchOfficialAlerts).
+// 재난·기상 경보. 실시간 기상으로 판정(미세먼지·호우·폭염·한파) + 기상청 공식 특보·지진(fetchOfficialAlerts).
+import { SCHOOL } from './location' // 지진 거리 판정 기준(학교 좌표)
+
 export type Severity = 'info' | 'warning' | 'danger'
 
 export interface DisasterAlert {
@@ -80,12 +81,28 @@ export function deriveAlerts(
 }
 
 /* ───────────── 공식 특보·지진 (data.go.kr 기상청, 프록시 경유) ─────────────
- *  · 기상특보: /api/kmawrn/getWthrWrnList (부산 stnId=159). title 자유문에서 유형·동작 파싱.
- *  · 지진:     /api/kmaeqk/getEqkMsg (최대 3일). 규모·위치.
+ *  · 기상특보: 통보문(getWthrWrnMsg)의 **t6 "현재 발효중인 특보"** 를 그대로 읽는다.
+ *      - getWthrWrnList는 "발표 이력 로그"라 접어서 현재 상태를 추정하면 틀린다(해제/변경이 지역별로
+ *        쪼개져 있어 제목만으론 판별 불가 → 해제된 특보가 계속 남거나, 부분 해제를 전체 해제로 오판).
+ *      - t6는 지역까지 명시하므로 **우리 지역(부산) 발효분만** 남기고, 해제되면 목록에서 사라져 자동 만료.
+ *  · 지진: /api/kmaeqk/getEqkMsg (최대 3일). 국외·원거리 지진 제외(학교 안전과 무관).
  *  실패(키 없음·미승인·네트워크)면 [] 반환 → 앱은 파생 경보만 표시(무중단). */
 
 const KMA_WARN_STN = '159' // 부산지방기상청 관할
-const ACTIONS = ['대치', '변경', '발표', '해제'] as const
+const SCHOOL_REGION = '부산' // t6 지역 매칭 기준(해상 '부산앞바다' 등은 제외되도록 정확 매칭)
+const EQK_MAX_KM = 600 // 학교에서 이보다 먼 지진은 제외
+
+const ymd = (d: Date) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+
+/** 두 좌표 간 거리(km) — 지진이 학교와 얼마나 가까운지 판단용. */
+function distKm(aLat: number, aLon: number, bLat: number, bLon: number): number {
+  const R = 6371
+  const rad = (d: number) => (d * Math.PI) / 180
+  const dLat = rad(bLat - aLat)
+  const dLon = rad(bLon - aLon)
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLon / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(h))
+}
 
 function iconForWarn(type: string): string {
   if (type.includes('호우') || type.includes('대설')) return 'ti-cloud-rain'
@@ -101,101 +118,95 @@ function fmtTmFc(tmFc: number | string): string {
   return s.length >= 12 ? `${s.slice(4, 6)}.${s.slice(6, 8)} ${s.slice(8, 10)}:${s.slice(10, 12)}` : ''
 }
 
-type ParsedWarn = { type: string; level: '경보' | '주의보'; action: string }
-
-/** title 자유문에서 " / " 뒤 특보 내용 추출 후 유형·등급·동작으로 분해.
- *  예: "폭염경보 변경·폭염주의보·열대야주의보 발표" → 폭염경보 변경, 폭염주의보 발표, 열대야주의보 발표
- *  (동작 단어는 그룹 끝에 한 번만 나오고, 앞의 동작 없는 항목들에 함께 적용되는 기상청 표기 관행) */
-function parseWarnTitle(title: string): ParsedWarn[] {
-  const seg1 = title.split(' / ')[1]
-  if (!seg1) return []
-  const content = seg1.replace(/\(\*\)\s*$/, '').trim()
-  const segs = content.split('·').map((s) => s.trim()).filter(Boolean)
-  const out: ParsedWarn[] = []
-  let buffer: { type: string; level: '경보' | '주의보' }[] = []
-  for (const seg of segs) {
-    const action = ACTIONS.find((a) => seg.endsWith(a))
-    const bodyRaw = action ? seg.slice(0, seg.length - action.length).trim() : seg
-    const level: '경보' | '주의보' | null = bodyRaw.endsWith('경보') ? '경보' : bodyRaw.endsWith('주의보') ? '주의보' : null
-    if (level) {
-      const type = bodyRaw.replace(/(경보|주의보)$/, '').trim()
-      buffer.push({ type, level })
-    }
-    if (action) {
-      buffer.forEach((b) => out.push({ ...b, action }))
-      buffer = []
-    }
-  }
-  buffer.forEach((b) => out.push({ ...b, action: '발표' })) // 그룹 끝 동작 없으면 발표로 간주
-  return out
+/** 통보문 t6 한 줄 파싱: "o 폭염주의보 : 경상남도, 부산, 울산" → { name, areas } */
+function parseActiveLine(line: string): { name: string; areas: string[] } | null {
+  const m = /^\s*o\s*(.+?)\s*:\s*(.+)$/.exec(line)
+  if (!m) return null
+  return { name: m[1].trim(), areas: m[2].split(',').map((s) => s.trim()) }
 }
+/** 우리 지역(부산) 발효분인지 — '부산' 또는 '부산(세부지역)'만. '남해동부앞바다(부산앞바다)' 같은 해상은 제외. */
+const inRegion = (areas: string[]) =>
+  areas.some((a) => a === SCHOOL_REGION || a.startsWith(`${SCHOOL_REGION}(`))
 
-interface WarnItem { title?: string; tmFc?: number | string }
-
-/** 최근 발표 이력을 시간순으로 접어 "현재 발효 중"(마지막 동작이 해제가 아닌) 특보만 남긴다. */
+/** 현재 발효중인 특보(우리 지역분만). 해제되면 t6에서 빠지므로 자동으로 사라진다. */
 async function fetchWeatherWarnings(): Promise<DisasterAlert[]> {
   const now = new Date()
-  const from = new Date(now.getTime() - 3 * 864e5) // 최근 3일
-  const ymd = (d: Date) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
-  const url =
-    `/api/kmawrn/getWthrWrnList?dataType=JSON&numOfRows=30&pageNo=1&stnId=${KMA_WARN_STN}` +
-    `&fromTmFc=${ymd(from)}&toTmFc=${ymd(now)}`
-  const j = await fetch(url).then((r) => r.json())
-  if (j?.response?.header?.resultCode !== '00') return []
-  const raw = j?.response?.body?.items?.item
-  const items: WarnItem[] = Array.isArray(raw) ? raw : raw ? [raw] : []
+  const from = new Date(now.getTime() - 5 * 864e5) // 목록 조회는 최대 6일 제한
+  // 1) 최신 발표번호(tmFc) 찾기
+  const lj = await fetch(
+    `/api/kmawrn/getWthrWrnList?dataType=JSON&numOfRows=1&pageNo=1&stnId=${KMA_WARN_STN}` +
+      `&fromTmFc=${ymd(from)}&toTmFc=${ymd(now)}`,
+  ).then((r) => r.json())
+  if (lj?.response?.header?.resultCode !== '00') return []
+  const li = lj?.response?.body?.items?.item
+  const latest = (Array.isArray(li) ? li[0] : li)?.tmFc
+  if (!latest) return [] // 최근 특보 발표 자체가 없음 = 발효중 없음
 
-  // 오래된 → 최신 순으로 접어 유형별 마지막 상태 판정
-  const state = new Map<string, { level: '경보' | '주의보'; action: string; tmFc: number | string }>()
-  items
-    .slice()
-    .sort((a, b) => Number(a.tmFc ?? 0) - Number(b.tmFc ?? 0))
-    .forEach((it) => {
-      parseWarnTitle(String(it.title ?? '')).forEach((w) => {
-        state.set(`${w.type} ${w.level}`, { level: w.level, action: w.action, tmFc: it.tmFc ?? '' })
-      })
-    })
+  // 2) 그 통보문의 "현재 발효중인 특보"(t6)
+  const mj = await fetch(
+    `/api/kmawrn/getWthrWrnMsg?dataType=JSON&numOfRows=1&pageNo=1&stnId=${KMA_WARN_STN}&tmFc=${latest}`,
+  ).then((r) => r.json())
+  if (mj?.response?.header?.resultCode !== '00') return []
+  const mi = mj?.response?.body?.items?.item
+  const t6 = String((Array.isArray(mi) ? mi[0] : mi)?.t6 ?? '')
+  const at = fmtTmFc(latest)
 
   const out: DisasterAlert[] = []
-  for (const [key, s] of state) {
-    if (s.action === '해제') continue // 해제된 특보 제외
-    const t = fmtTmFc(s.tmFc)
+  for (const line of t6.split(/\r?\n/)) {
+    const p = parseActiveLine(line)
+    if (!p || !inRegion(p.areas)) continue
+    const level = p.name.endsWith('경보') ? '경보' : p.name.endsWith('주의보') ? '주의보' : null
+    if (!level) continue // "없음" 등
+    const type = p.name.slice(0, p.name.length - level.length)
     out.push({
-      id: `kma-wrn-${key}`,
+      id: `kma-wrn-${p.name}`,
       type: '기상특보',
-      title: key, // 예: "폭염 경보"
-      detail: `기상청 특보 · 부산${t ? ` · ${t} 발효` : ''}`,
-      severity: s.level === '경보' ? 'danger' : 'warning',
-      icon: iconForWarn(key),
+      title: `${type} ${level}`,
+      detail: `기상청 특보 · ${SCHOOL_REGION} 발효 중${at ? ` · ${at} 기준` : ''}`,
+      severity: level === '경보' ? 'danger' : 'warning',
+      icon: iconForWarn(type),
     })
   }
   return out
 }
 
-interface EqkItem { loc?: string; mt?: string | number; magMl?: string | number; tmEqk?: string | number; inT?: string }
+interface EqkItem {
+  loc?: string
+  mt?: string | number
+  tmEqk?: string | number
+  rem?: string
+  lat?: string | number
+  lon?: string | number
+}
 
-/** 최근 3일 지진 통보. 규모 2.0+ 만 노출(2.0~ 주의, 4.0+ 경보). */
+/** 최근 3일 지진 통보 중 **학교와 관련된 것만**: 기상청이 '국내영향없음'으로 판단한 국외 지진 제외 +
+ *  학교에서 EQK_MAX_KM 밖 제외. 규모 2.0+ 노출(4.0+ 경보). */
 async function fetchEarthquakes(): Promise<DisasterAlert[]> {
   const now = new Date()
-  const from = new Date(now.getTime() - 3 * 864e5)
-  const ymd = (d: Date) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
-  const url = `/api/kmaeqk/getEqkMsg?dataType=JSON&numOfRows=10&pageNo=1&fromTmFc=${ymd(from)}&toTmFc=${ymd(now)}`
-  const j = await fetch(url).then((r) => r.json())
+  const from = new Date(now.getTime() - 3 * 864e5) // 지진은 최대 3일 제한
+  const j = await fetch(
+    `/api/kmaeqk/getEqkMsg?dataType=JSON&numOfRows=10&pageNo=1&fromTmFc=${ymd(from)}&toTmFc=${ymd(now)}`,
+  ).then((r) => r.json())
   if (j?.response?.header?.resultCode !== '00') return [] // 03 NO_DATA 등
   const raw = j?.response?.body?.items?.item
   const items: EqkItem[] = Array.isArray(raw) ? raw : raw ? [raw] : []
 
   const out: DisasterAlert[] = []
   items.forEach((it, i) => {
-    const mag = Number(it.mt ?? it.magMl ?? NaN)
+    if (/국내\s*영향\s*없음/.test(String(it.rem ?? ''))) return // 기상청이 국내 무영향으로 명시(국외 지진)
+    const mag = Number(it.mt ?? NaN)
     if (Number.isNaN(mag) || mag < 2.0) return
+    const lat = Number(it.lat)
+    const lon = Number(it.lon)
+    const km = Number.isFinite(lat) && Number.isFinite(lon) ? distKm(SCHOOL.lat, SCHOOL.lon, lat, lon) : NaN
+    if (Number.isFinite(km) && km > EQK_MAX_KM) return // 학교와 무관한 원거리 지진
     const loc = String(it.loc ?? '위치 미상').trim()
     const t = fmtTmFc(String(it.tmEqk ?? '').slice(0, 12))
     out.push({
       id: `kma-eqk-${i}-${it.tmEqk ?? ''}`,
       type: '지진',
       title: `지진 규모 ${mag.toFixed(1)}`,
-      detail: `${loc}${t ? ` · ${t}` : ''} · 기상청 지진통보`,
+      detail: `${loc}${t ? ` · ${t}` : ''}${Number.isFinite(km) ? ` · 학교에서 약 ${Math.round(km)}km` : ''}`,
       severity: mag >= 4.0 ? 'danger' : 'warning',
       icon: 'ti-alert-triangle',
     })
