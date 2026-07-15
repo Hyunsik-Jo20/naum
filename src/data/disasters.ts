@@ -179,13 +179,14 @@ interface EqkItem {
   lon?: string | number
 }
 
-/** 최근 3일 지진 통보 중 **학교와 관련된 것만**: 기상청이 '국내영향없음'으로 판단한 국외 지진 제외 +
- *  학교에서 EQK_MAX_KM 밖 제외. 규모 2.0+ 노출(4.0+ 경보). */
+/** **오늘 발생한** 지진 중 학교와 관련된 것만. 지진은 지나간 이벤트라 전날 것은 보건교사에게 불필요
+ *  (반면 기상특보는 "발효 중" 상태라 시작일이 며칠 전이어도 당일 상황 → 유지).
+ *  제외: 기상청이 '국내영향없음'으로 명시한 국외 지진, 학교에서 EQK_MAX_KM 밖. 규모 2.0+(4.0+ 경보). */
 async function fetchEarthquakes(): Promise<DisasterAlert[]> {
   const now = new Date()
-  const from = new Date(now.getTime() - 3 * 864e5) // 지진은 최대 3일 제한
+  const today = ymd(now)
   const j = await fetch(
-    `/api/kmaeqk/getEqkMsg?dataType=JSON&numOfRows=10&pageNo=1&fromTmFc=${ymd(from)}&toTmFc=${ymd(now)}`,
+    `/api/kmaeqk/getEqkMsg?dataType=JSON&numOfRows=10&pageNo=1&fromTmFc=${today}&toTmFc=${today}`,
   ).then((r) => r.json())
   if (j?.response?.header?.resultCode !== '00') return [] // 03 NO_DATA 등
   const raw = j?.response?.body?.items?.item
@@ -193,6 +194,7 @@ async function fetchEarthquakes(): Promise<DisasterAlert[]> {
 
   const out: DisasterAlert[] = []
   items.forEach((it, i) => {
+    if (String(it.tmEqk ?? '').slice(0, 8) !== today) return // 오늘 발생분만(자정 기준)
     if (/국내\s*영향\s*없음/.test(String(it.rem ?? ''))) return // 기상청이 국내 무영향으로 명시(국외 지진)
     const mag = Number(it.mt ?? NaN)
     if (Number.isNaN(mag) || mag < 2.0) return
