@@ -62,10 +62,10 @@ function hhmm(ts: number): string {
   const d = new Date(ts)
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
 }
-/** "증상 → 처치 (시간)" — 학생이 키오스크에서 입력한 증상과 그에 따른 처치를 함께 기록. */
-function treatText(symptom: string, treat: string, time: string): string {
-  const body = [symptom.trim(), treat.trim()].filter(Boolean).join(' → ')
-  return body ? `${body} (${time})` : `(${time})`
+/** "증상 → 처치 → 결과 (시간)" — 학생 입력 증상·처치·처치결과(교실복귀/귀가/병원이송/관찰)를 함께 기록. */
+function treatText(symptom: string, treat: string, outcome: string, time: string): string {
+  const chain = [symptom.trim(), treat.trim(), outcome.trim()].filter(Boolean).join(' → ')
+  return chain ? `${chain} (${time})` : `(${time})`
 }
 
 /** 오늘: 로컬 실제 방문에서 응급처치 항목 작성(이름·반은 로컬에서만). */
@@ -89,7 +89,7 @@ export function realEntries(date: Date, visits: Visit[], studentOf: (id: string)
       if (names.length === 0) { names = ['기타']; cats = ['기타'] }
       const time = hhmm(v.treatedAt ?? v.calledAt ?? v.createdAt)
       const symptom = v.symptomTileIds.map((id) => tileById(id)?.label).filter(Boolean).join(', ')
-      return entryFromDiseases(cls, name, v.sex, names, cats, treatText(symptom, v.treatments.join(', '), time))
+      return entryFromDiseases(cls, name, v.sex, names, cats, treatText(symptom, v.treatments.join(', '), v.outcome ?? '', time))
     })
 }
 
@@ -107,6 +107,9 @@ const DIAG_POOL: { name: string; cat: string; sym: string; treat: string }[] = [
   { name: '염좌', cat: '근골격계', sym: '발목을 삐었어요', treat: '냉찜질, 압박' },
   { name: '어지러움', cat: '정신신경계', sym: '어지러워요', treat: '안정 및 휴식' },
 ]
+
+// 과거일 합성용 처치결과(교실 복귀 위주, 가끔 귀가·관찰·병원).
+const SYNTH_OUTCOMES = ['교실 복귀', '교실 복귀', '교실 복귀', '교실 복귀', '귀가', '관찰', '병원 이송']
 
 function frac(a: number, b: number): number {
   const x = Math.sin(a * 53.7 + b * 19.1) * 43758.5453
@@ -132,7 +135,8 @@ export function synthEntries(date: Date): LogEntry[] {
     // 처치 시간(09:00~15:00, 결정적, 연번 순으로 증가)
     const mins = 540 + Math.floor((i / Math.max(1, count - 1)) * 360 + frac(seed, i + 11) * 20)
     const time = `${pad2(Math.floor(mins / 60))}:${pad2(mins % 60)}`
-    entries.push(entryFromDiseases(`${st.grade}-${st.classNo}`, st.name, st.sex, names, cats, treatText(d0.sym, d0.treat, time)))
+    const outcome = SYNTH_OUTCOMES[Math.floor(frac(seed, i + 5) * SYNTH_OUTCOMES.length) % SYNTH_OUTCOMES.length]
+    entries.push(entryFromDiseases(`${st.grade}-${st.classNo}`, st.name, st.sex, names, cats, treatText(d0.sym, d0.treat, outcome, time)))
   }
   return entries
 }
@@ -212,7 +216,7 @@ function dayBlockCells(blockStart: number, date: Date, entries: LogEntry[], stat
   put(7, { col: C(F.NAME), value: '이  름', across: 3, style: 'hdr' })
   put(7, { col: C(F.SEX), value: '성별', style: 'hdr' })
   put(7, { col: C(F.DIAG), value: '병명', across: 3, style: 'hdr' })
-  put(7, { col: C(F.TREAT), value: '증상 및 처치', across: 17, style: 'hdr' })
+  put(7, { col: C(F.TREAT), value: '증상 · 처치 · 결과', across: 17, style: 'hdr' })
 
   // 행8~37: 응급처치 항목
   for (let i = 0; i < ENTRY_ROWS; i++) {
