@@ -150,6 +150,72 @@ export async function subscribeStudent(studentId: string, onChange: () => void):
   return () => { offWake(); void sb.removeChannel(ch) }
 }
 
+// ── 교사 → 보건교사 (relay_nurse_inbox): 보건실 요청·전학 안내 ──
+export type NurseReqKind = '보건실요청' | '전학안내'
+export interface NurseRequest {
+  kind: NurseReqKind
+  grade: number
+  classNo: number
+  number: number // 학생 번호(비식별 — 이름은 명부 있는 보건교사만)
+  symIds?: string[] // 보건실요청: 증상 타일 id
+  name?: string // 전학안내: 이름(선택, 반 키로 암호화되어 전달)
+  sex?: '남' | '여' // 전학안내: 성별(선택)
+}
+
+/** 교사 발신 — 반 키로 암호화해 relay_nurse_inbox에 적재. */
+export async function emitNurseRequest(req: NurseRequest, ts: number) {
+  const sb = supabase!
+  const [classToken, enc] = await Promise.all([
+    schoolClassToken(req.grade, req.classNo),
+    schoolClassKey(req.grade, req.classNo).then((k) => encryptJson(k, req)),
+  ])
+  const { error } = await sb.from('relay_nurse_inbox').insert({ class_token: classToken, enc, ts })
+  if (error) throw new Error(`emitNurseRequest: ${error.message}`)
+}
+
+export interface NurseInboxItem { id: number; ts: number; req: NurseRequest | null }
+
+/** 보건교사 수신 — 모든 요청을 자기 학교 반 키로 복호(반 토큰 역맵). classes=명부의 (grade,classNo) 목록. */
+export async function loadNurseRequests(classes: { grade: number; classNo: number }[]): Promise<NurseInboxItem[]> {
+  const sb = supabase!
+  const map = new Map<string, CryptoKey>()
+  await Promise.all(
+    classes.map(async (c) => {
+      const [tok, key] = await Promise.all([schoolClassToken(c.grade, c.classNo), schoolClassKey(c.grade, c.classNo)])
+      map.set(tok, key)
+    }),
+  )
+  const { data, error } = await sb.from('relay_nurse_inbox').select('id, class_token, enc, ts').order('ts', { ascending: false })
+  if (error || !data) return []
+  return Promise.all(
+    (data as { id: number; class_token: string; enc: Enc; ts: number }[]).map(async (r) => {
+      const key = map.get(r.class_token)
+      const req = key ? await decryptJson<NurseRequest>(key, r.enc).catch(() => null) : null
+      return { id: r.id, ts: r.ts, req }
+    }),
+  )
+}
+
+/** 보건교사: 처리 완료한 요청 삭제. */
+export async function deleteNurseRequest(id: number) {
+  const sb = supabase!
+  await sb.from('relay_nurse_inbox').delete().eq('id', id)
+}
+
+/** 보건교사: 요청 인박스 실시간 구독. */
+export async function subscribeNurse(onChange: () => void): Promise<() => void> {
+  const sb = supabase!
+  let once = false
+  const ch = sb
+    .channel('relay-nurse-inbox')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'relay_nurse_inbox' }, onChange)
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') { if (once) onChange(); once = true }
+    })
+  const offWake = onWake(onChange)
+  return () => { offWake(); void sb.removeChannel(ch) }
+}
+
 /** 토큰 → 학생 매핑(담임용): 우리 반 학생들의 결정적 토큰을 계산해 역참조 테이블 구성. */
 export async function buildClassTokenMap(students: { id: string; name: string; number: number }[]): Promise<Record<string, { name: string; number: number }>> {
   await primeStudentTokens(students.map((s) => s.id)) // 서버 발급 시 한 번에(교사도 라우팅 토큰 허용)

@@ -25,6 +25,7 @@ export interface ClassPayload {
   outcome?: string // 결과(교실 복귀/귀가/병원 이송/관찰)
   disease?: string // 추정 병명(주증상)
   treatments?: string[] // 시행한 처치(기타 직접입력 포함)
+  number?: number // 학생 번호(반 키로 암호화 — 교사 화면 번호 표시용, 이름 없이도 식별)
 }
 
 /** 스테이션이 해당 반의 현재 방문을 "토큰 + 암호문" 이벤트로 중계에 push(스냅샷). 내용은 반 키로 E2E 암호화. */

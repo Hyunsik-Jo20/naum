@@ -63,6 +63,7 @@
 | 0007_visit_delete | 방문 삭제 RLS | ✅ (authenticated DELETE 204 확인) |
 | 0008_role_from_app_meta | 가입 role을 app_metadata에서만 신뢰(무단 보건교사 가입 차단) | ✅ **적용+env 설정 완료(2026-07-11)** — `/api/token` 400(≠501) 확인 = 토큰 게이트 활성. 신규 보건교사 가입은 서버 생성(role=nurse) |
 | 0009_rls_staff_scope | visits·visit_links 조회/수정/삭제·app_state 쓰기를 nurse/edu 역할로 제한(`is_staff()`) | ⏳ **미적용** — 적용 전 스테이징 테스트 권장(콘솔 조회·키오스크 접수·교사/학부모 수신) |
+| 0010_relay_nurse_inbox | 교사→보건교사 relay 채널(보건실 요청·전학 안내) | ⏳ **미적용** — 교사 페이지 보건실 보내기/전학 안내의 **클라우드 전달에 필요**(미적용 시 같은-브라우저 로컬 시뮬만) |
 
 ## 6. 실행/빌드
 ```
@@ -90,6 +91,12 @@ git push           # → Vercel 자동 재배포
 - **① RLS 정책 느슨(중)**: **일부 조치 — `0009_rls_staff_scope.sql` 작성**(visits·visit_links 조회/수정/삭제·app_state 쓰기를 nurse/edu로 제한). **적용은 사용자가 스테이징 테스트 후 진행.** 유지된 부분(키오스크 anon INSERT, 교사/학부모 anon relay SELECT)은 기능상 필요+E2E로 방어. 남은 후속: school_id 다학교 스코프, anon insert 크기/횟수 제한.
 - **② 학교 비밀 번들 노출(중~높)**: **Phase 1 배포 완료(2026-07-11)** — `SCHOOL_MASTER_SECRET` env 설정됨(`/api/keys` 403≠501 확인). 이제 서버 발급 키 사용. **남은 것 = Phase 2**: 이름복원·교사/학부모 알림 정상 확인 후 클라이언트 `VITE_SCHOOL_LINK_SECRET` **제거+재배포** → 번들에서 마스터 비밀 사라짐 = 실제 수정 완료. ([SUPABASE_SETUP §5-2](SUPABASE_SETUP.md))
 - **③ 분산 rate limit**: 현재 인스턴스 로컬(베스트에포트) → 운영은 Vercel KV/WAF 필요. `signup`(service_role 계정생성)도 IP/토큰별 제한 권장.
+
+## 6-5. 최근 추가(2026-07-15) — 교사→보건교사(보건실 보내기·전학 안내)
+- **교사 페이지(`TeacherView`) 개편**: (a) **보건실로 보내기** — 학생 번호 + 증상 타일 선택 → 보건교사에게 요청 (b) **전학생 추가** — 번호·이름·성별 → 보건교사에게 전학 안내 + 교사 로컬 명부에 추가 (c) **반 명부 엑셀/CSV 업로드**(`teacherClassRoster`, 교사 기기 로컬만) → 번호↔이름 매칭 (d) 받은 알림은 **번호 기반**(암호문 `ClassPayload.number`) — 이름은 명부 업로드 시에만.
+- **보건교사 콘솔(`NurseQueue`) 수신함**: "보건실 요청" 박스 — 보건실요청은 **번호→명부로 학생 확인 후 [접수]**(방문 생성), 전학안내는 **[명부에 추가]**. 처리 후 요청 삭제.
+- **채널**: `relay_nurse_inbox`(마이그레이션 0010) + `supabaseRelay.emitNurseRequest/loadNurseRequests/subscribeNurse` + `data/nurseRequest`(supabase=클라우드 / 미설정=로컬 시뮬 분기). 내용은 **반 키로 암호화**(번호·이름 포함) — 서버는 토큰·암호문만. 비식별 원칙 유지(보건교사가 명부로 번호→이름 복원).
+- 검증: 빌드·양 화면 렌더·교사 명부 매칭·요청 payload 암복호 라운드트립(반 키, 타 반 복호 실패) 확인. **클라우드 전달은 0010 적용 후**.
 
 ## 7. 미완료 / 다음 후보
 - **솔라피 SMS/알림톡 연동**: 템플릿 문구 + **발송 배관(`api/sms.js`·`data/sms.ts`) 구현 완료**([SOLAPI_TEMPLATES.md](SOLAPI_TEMPLATES.md) §6, 핸들러 mock 8종 통과). **남은 일**: ① 발신번호 등록 + 카카오 템플릿 승인 ② Vercel `SOLAPI_*` 환경변수 ③ 처치완료 흐름에 `sendSms` 연결(현재 오발송·과금 방지로 수동 배관만). 휴대폰 OTP 로그인도 솔라피+Supabase Send SMS Hook으로 후속.

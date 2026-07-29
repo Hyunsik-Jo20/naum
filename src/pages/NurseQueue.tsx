@@ -9,6 +9,8 @@ import LoginTokenModal from '../components/LoginTokenModal'
 import ObserveResolveModal from '../components/ObserveResolveModal'
 import ObservePickerModal from '../components/ObservePickerModal'
 import { loadNotifyTargets, saveNotifyTargets } from '../data/notifyTargets'
+import { loadRequests, subscribeRequests, removeRequest, type NurseInboxItem } from '../data/nurseRequest'
+import { roster, saveRoster } from '../data/localRoster'
 import { fetchCurrent, type CurrentWeather } from '../data/weatherApi'
 import { deriveAlerts } from '../data/disasters'
 import { useOfficialAlerts } from '../data/useOfficialAlerts'
@@ -38,6 +40,7 @@ export default function NurseQueue() {
   const [showToken, setShowToken] = useState(false)
   const [resolveId, setResolveId] = useState<string | null>(null) // 관찰 종료 결과 선택 대상
   const [extendId, setExtendId] = useState<string | null>(null) // 관찰 연장 대상
+  const [requests, setRequests] = useState<NurseInboxItem[]>([]) // 교사 보건실 요청·전학 안내
   const [notifyT, setNotifyT] = useState(() => loadNotifyTargets())
   const [, setTick] = useState(0) // 관찰 남은시간 갱신·종료 감지용 주기 리렌더
 
@@ -54,6 +57,40 @@ export default function NurseQueue() {
     const t = window.setInterval(() => setTick((x) => x + 1), 20000)
     return () => window.clearInterval(t)
   }, [])
+
+  // 교사 보건실 요청·전학 안내 수신(명부의 반들 키로 복호) + 실시간 구독.
+  useEffect(() => {
+    const classes = [...new Map(roster.map((s) => [`${s.grade}-${s.classNo}`, { grade: s.grade, classNo: s.classNo }])).values()]
+    let ok = true
+    const refresh = async () => { const r = await loadRequests(classes); if (ok) setRequests(r.filter((x) => x.req)) }
+    void refresh()
+    const off = subscribeRequests(() => void refresh())
+    return () => { ok = false; off() }
+  }, [])
+
+  const findByNo = (g: number, c: number, n: number) => roster.find((s) => s.grade === g && s.classNo === c && s.number === n)
+  async function acceptRequest(item: NurseInboxItem) {
+    const req = item.req!
+    const st = findByNo(req.grade, req.classNo, req.number)
+    if (!st) { alert(`${req.grade}-${req.classNo} ${req.number}번 학생이 명부에 없습니다. 전학생이면 먼저 명부에 추가하세요.`); return }
+    addVisit(st, req.symIds ?? [])
+    await removeRequest(item.id).catch(() => {})
+    setRequests((rs) => rs.filter((x) => x.id !== item.id))
+  }
+  async function addTransfer(item: NurseInboxItem) {
+    const req = item.req!
+    if (!findByNo(req.grade, req.classNo, req.number)) {
+      const st = { id: `u_${req.grade}_${req.classNo}_${req.number}_t${Date.now()}`, name: req.name ?? `${req.number}번`, grade: req.grade, classNo: req.classNo, number: req.number, sex: req.sex ?? '남' as const }
+      saveRoster([...roster, st])
+    }
+    await removeRequest(item.id).catch(() => {})
+    setRequests((rs) => rs.filter((x) => x.id !== item.id))
+    alert('명부에 추가했습니다. (새로고침 후 접수·복원에 반영됩니다)')
+  }
+  async function dismissRequest(item: NurseInboxItem) {
+    await removeRequest(item.id).catch(() => {})
+    setRequests((rs) => rs.filter((x) => x.id !== item.id))
+  }
 
   // 날씨·미세먼지 → 재난·기상 경보(콘솔에도 표시). 10분마다 갱신.
   useEffect(() => {
@@ -193,6 +230,51 @@ export default function NurseQueue() {
               <i className="ti ti-device-tablet" aria-hidden="true" /> 학생 키오스크 새 탭으로 열기
             </a>
           </div>
+
+          {/* 교사 보건실 요청 · 전학 안내 */}
+          {requests.length > 0 && (
+            <div className="recv-box">
+              <span className="col-head warn-t" style={{ padding: 0 }}>
+                <i className="ti ti-first-aid-kit" aria-hidden="true" /> 보건실 요청 · {requests.length}
+              </span>
+              <div className="recv-list" style={{ marginTop: 6 }}>
+                {requests.map((item) => {
+                  const req = item.req!
+                  const st = findByNo(req.grade, req.classNo, req.number)
+                  if (req.kind === '전학안내') {
+                    return (
+                      <div key={item.id} className="recv-item notice">
+                        <div className="recv-top">
+                          <span className="recv-from"><i className="ti ti-user-plus" aria-hidden="true" /> 전학생 안내</span>
+                          <span className="recv-time">{hhmm(item.ts)}</span>
+                        </div>
+                        <div className="recv-title">{req.grade}-{req.classNo} {req.number}번 {req.name ?? ''} {req.sex ? `(${req.sex})` : ''}</div>
+                        <div className="row" style={{ gap: 6, marginTop: 6 }}>
+                          <button className="btn small" onClick={() => void addTransfer(item)}>명부에 추가</button>
+                          <button className="btn ghost small" onClick={() => void dismissRequest(item)}>무시</button>
+                        </div>
+                      </div>
+                    )
+                  }
+                  const syms = (req.symIds ?? []).map((id) => tileById(id)?.label).filter(Boolean).join(' · ')
+                  return (
+                    <div key={item.id} className="recv-item alert">
+                      <div className="recv-top">
+                        <span className="recv-from"><i className="ti ti-first-aid-kit" aria-hidden="true" /> 보건실 요청</span>
+                        <span className="recv-time">{hhmm(item.ts)}</span>
+                      </div>
+                      <div className="recv-title">{req.grade}-{req.classNo} {req.number}번{st ? ` ${st.name}` : ''}</div>
+                      {syms && <div className="recv-body">{syms}</div>}
+                      <div className="row" style={{ gap: 6, marginTop: 6 }}>
+                        <button className="btn small primary" onClick={() => void acceptRequest(item)}>접수</button>
+                        <button className="btn ghost small" onClick={() => void dismissRequest(item)}>무시</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* 받은 공지·알림 — 담임·학부모 메시지 + 교육청 공지·경보 */}
           <div className="recv-box">

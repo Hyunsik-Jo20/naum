@@ -339,7 +339,7 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
           offline.run({ type: 'createVisit', visit: v, studentId: student.id })
           // 알림 대상 설정(담임/학부모)에 따라 발송
           const nt = loadNotifyTargets()
-          if (nt.teacher) offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: { kind: '접수', sym }, ts: v.createdAt })
+          if (nt.teacher) offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: { kind: '접수', sym, number: student.number }, ts: v.createdAt })
           if (nt.parent) offline.run({ type: 'emitStudent', studentId: student.id, payload: { kind: '접수', sym }, ts: v.createdAt })
         } else if (modeRef.current === 'backend') void apiCreateVisit(v, student.id)
         return v
@@ -386,6 +386,7 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
               disease: prim?.name,
               treatments: patch.treatments ?? cur?.treatments,
               sym,
+              number: student.number,
             }
             const nt = loadNotifyTargets()
             if (nt.teacher) offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: p, ts: treatedAt })
