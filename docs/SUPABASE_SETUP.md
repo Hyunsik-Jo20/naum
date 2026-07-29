@@ -111,9 +111,9 @@ VITE_SUPABASE_ANON_KEY=eyJ...
 2. 재배포. 이제 앱은 서버 발급 키를 우선 사용(미설정 시 로컬 폴백이라 무중단).
 3. 확인: 보건교사 콘솔 이름 복원·교사/학부모 알림 정상.
 
-**Phase 2 — 번들에서 비밀 제거(실제 수정 완료)**
+**Phase 2 — 번들에서 비밀 제거 ✅ 완료·실검증(2026-07-29)**
 
-> ✅ **전제 검증 완료(2026-07-29)**: 서버 발급 키(`/api/keys`, `SCHOOL_MASTER_SECRET` 파생)가 로컬 파생 키(`VITE_SCHOOL_LINK_SECRET`)와 **바이트 동일** 확인 — links·class:1-1·student 키·class 토큰 프리픽스 전부 일치. 즉 두 비밀 값이 동일 → **클라 env 제거해도 기존 암호문 그대로 복호(무손실)**. 배포 번들 `index-*.js`에 비밀이 현재 존재함도 확인(제거 대상).
+> ✅ **완료(2026-07-29)**: Vercel `VITE_SCHOOL_LINK_SECRET` 삭제 + 무캐시 재배포. 실검증 — ① 새 번들 `index-ws1NaADO.js`에 비밀 문자열 **없음** ② 서버 발급 키가 제거 전과 **바이트 동일**(links·class·student·token) ③ 보건교사 콘솔이 서버 키로 복호 → **이름복원 정상**(실제 학생 이름·학부모 연락처 렌더), 콘솔 에러 0. 아래 절차는 재현/참고용.
 
 4. Phase 1이 정상 확인되면, 클라이언트 env에서 **`VITE_SCHOOL_LINK_SECRET` 제거** 후 재배포.
    - Vercel → Project → Settings → Environment Variables → `VITE_SCHOOL_LINK_SECRET` 삭제(**Production·Preview 모두**) → Save.
