@@ -14,6 +14,7 @@ import { sendNurseRequest } from '../data/nurseRequest'
 import { classRoster, hasRoster, nameOf, setClassRoster, upsertOne, type TClassStudent } from '../data/teacherClassRoster'
 import { parseRosterRows, parseRosterCsv, decodeBuffer } from '../data/localRoster'
 import { readXlsxFirstSheet } from '../data/xlsxReader'
+import { setBadge, clearBadge } from '../data/appBadge'
 
 function clock(ts: number) {
   const d = new Date(ts)
@@ -71,6 +72,31 @@ export default function TeacherView() {
   // 이벤트의 번호 — 암호문 payload.number 우선(이름 없이도 식별), 없으면 토큰맵.
   const evNumber = (e: Evt) => e.payload?.number ?? tokenMap[e.studentToken]?.number
   const evName = (e: Evt) => nameByNo(evNumber(e))
+
+  // ── 실행 아이콘 배지(설치형 PWA): 미확인 보건실 알림 개수 ──
+  //  교사가 앱을 보고 있으면(visible) 읽음 처리 + 배지 제거. 앱이 백그라운드(다른 앱/탭)일 때
+  //  새 알림이 오면 미확인 개수를 앱 아이콘 우측 상단에 숫자로 표시. 이름 없이 개수만 노출(비식별).
+  useEffect(() => {
+    if (session?.role !== 'teacher') return
+    const seenKey = `naum.teacher.alertSeen.${grade}-${classNo}`
+    const maxTs = events.reduce((m, e) => Math.max(m, e.ts), 0)
+    const seenTs = () => { try { return Number(localStorage.getItem(seenKey) || '0') } catch { return 0 } }
+    const sync = () => {
+      if (document.visibilityState === 'visible') {
+        try { localStorage.setItem(seenKey, String(maxTs)) } catch { /* ignore */ }
+        clearBadge()
+      } else {
+        const seen = seenTs()
+        setBadge(events.filter((e) => e.ts > seen).length)
+      }
+    }
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    return () => document.removeEventListener('visibilitychange', sync)
+  }, [events, session?.role, grade, classNo])
+
+  // 교사 화면을 떠나거나 로그아웃할 때 배지 정리.
+  useEffect(() => () => clearBadge(), [])
 
   // ── 보건실로 보내기 ──
   const [sendNo, setSendNo] = useState('')
