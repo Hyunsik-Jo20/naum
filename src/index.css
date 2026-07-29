@@ -1066,6 +1066,13 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
 }
 .obs-chip.on { background: var(--info); color: #fff; border-color: var(--info); }
 .obs-end { text-align: center; font-size: 14px; color: var(--text-2); margin: 12px 0 4px; }
+/* 인체도 부위 선택(BodyMapModal) */
+.bodymap { display: flex; justify-content: center; background: var(--surface-2, var(--bg-2)); border-radius: 12px; padding: 8px; }
+.bm-zone { fill: var(--border-2); stroke: var(--text-3); stroke-width: 0.6; cursor: pointer; transition: fill 0.1s; }
+.bm-zone:hover { fill: var(--text-3); }
+.bodymap.tone-danger .bm-zone.on { fill: var(--danger); stroke: var(--danger); }
+.bodymap.tone-info .bm-zone.on { fill: var(--info); stroke: var(--info); }
+.bm-selected { margin-top: 10px; font-size: 14px; color: var(--text-1); text-align: center; }
 /* 관찰 종료 결과 선택 버튼 */
 .obs-resolve { display: flex; flex-direction: column; gap: 8px; }
 .obs-resolve-btn {

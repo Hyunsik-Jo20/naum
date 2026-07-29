@@ -13,6 +13,7 @@ import { aiTriage, aiConfigured } from '../data/aiTriage'
 import AiSettingsModal from './AiSettingsModal'
 import TempPickerModal from './TempPickerModal'
 import ObservePickerModal from './ObservePickerModal'
+import BodyMapModal from './BodyMapModal'
 import { teacherOf } from '../data/teacherRoster'
 import { useVisits } from '../store/visits'
 import type { Disease, Outcome, Visit } from '../types'
@@ -77,6 +78,7 @@ export default function TreatPanel({
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false)
   const [tempOpen, setTempOpen] = useState(false)
   const [observeOpen, setObserveOpen] = useState(false)
+  const [bodyMapKind, setBodyMapKind] = useState<string | null>(null) // 부위 선택 대상 처치(지혈/밴드·소독)
   const [observeMinutes, setObserveMinutes] = useState(visit.observeUntil ? Math.max(10, Math.round((visit.observeUntil - (visit.treatedAt ?? Date.now())) / 60000)) : 30)
   const [outcome, setOutcome] = useState<Outcome>(visit.outcome ?? '교실 복귀')
   const [escort, setEscort] = useState<string[]>(visit.escort ?? ['보건교사'])
@@ -190,6 +192,24 @@ export default function TreatPanel({
   }
   function removeTemp() {
     setTreatments((p) => p.filter((x) => !x.startsWith(TEMP_LABEL)))
+  }
+
+  // 부위 있는 처치(지혈·밴드·소독) — 인체도로 부위 선택. "지혈 (이마)" 형태로 저장(A안).
+  const SITE_TREATS = ['지혈', '밴드·소독']
+  const isSiteTreat = (t: string) => SITE_TREATS.includes(t)
+  const hasKind = (kind: string) => treatments.some((x) => x === kind || x.startsWith(`${kind} (`))
+  const sitesOf = (kind: string) =>
+    treatments.filter((x) => x.startsWith(`${kind} (`)).map((x) => x.slice(kind.length + 2, -1))
+  function applyBodyMap(kind: string, parts: string[]) {
+    setTreatments((p) => {
+      const rest = p.filter((x) => x !== kind && !x.startsWith(`${kind} (`))
+      return parts.length ? [...rest, ...parts.map((pp) => `${kind} (${pp})`)] : [...rest, kind]
+    })
+    setBodyMapKind(null)
+  }
+  function removeBodyMap(kind: string) {
+    setTreatments((p) => p.filter((x) => x !== kind && !x.startsWith(`${kind} (`)))
+    setBodyMapKind(null)
   }
 
   function buildPatch(): Partial<Visit> {
@@ -371,10 +391,21 @@ export default function TreatPanel({
       <div className="treat-grid">
         {treatOrder.map((t, i) => {
           const isTemp = t === TEMP_LABEL
-          const on = isTemp ? !!tempTreatment : treatments.includes(t)
-          // 체온 측정: 누르면 값 선택 모달(켜진 상태면 해제). 칩에 측정값 표시.
-          const onClick = isTemp ? () => (on ? removeTemp() : setTempOpen(true)) : () => toggleTreatment(t)
-          const label = isTemp && curTemp != null ? `${TEMP_LABEL} ${curTemp.toFixed(1)}℃` : t
+          const isSite = isSiteTreat(t)
+          const on = isTemp ? !!tempTreatment : isSite ? hasKind(t) : treatments.includes(t)
+          // 체온=값 모달, 지혈·밴드소독=인체도 부위 모달, 그 외=단순 토글. 칩에 값/부위 표시.
+          const onClick = isTemp
+            ? () => (on ? removeTemp() : setTempOpen(true))
+            : isSite
+              ? () => setBodyMapKind(t)
+              : () => toggleTreatment(t)
+          const siteList = isSite ? sitesOf(t) : []
+          const label =
+            isTemp && curTemp != null
+              ? `${TEMP_LABEL} ${curTemp.toFixed(1)}℃`
+              : isSite && siteList.length
+                ? `${t} (${siteList.join(', ')})`
+                : t
           return (
             <button
               key={t}
@@ -385,7 +416,7 @@ export default function TreatPanel({
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => moveTreat(i)}
               onDragEnd={() => setDragIdx(null)}
-              title={isTemp ? '체온 값 선택' : '드래그해서 순서 변경'}
+              title={isTemp ? '체온 값 선택' : isSite ? '처치 부위 선택' : '드래그해서 순서 변경'}
             >
               <i className="ti ti-grip-vertical grip" aria-hidden="true" />
               {on && <i className="ti ti-check" aria-hidden="true" />} {label}
@@ -511,6 +542,15 @@ export default function TreatPanel({
           initialMin={observeMinutes}
           onConfirm={(m) => { setObserveMinutes(m); setObserveOpen(false) }}
           onClose={() => setObserveOpen(false)}
+        />
+      )}
+      {bodyMapKind && (
+        <BodyMapModal
+          kind={bodyMapKind}
+          initialParts={sitesOf(bodyMapKind)}
+          onConfirm={(parts) => applyBodyMap(bodyMapKind, parts)}
+          onRemove={() => removeBodyMap(bodyMapKind)}
+          onClose={() => setBodyMapKind(null)}
         />
       )}
     </div>
