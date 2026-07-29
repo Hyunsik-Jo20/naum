@@ -75,9 +75,9 @@
 | 0006_visit_observe | `observe_until` 컬럼(관찰) | ✅ (201 확인) |
 | 0007_visit_delete | 방문 삭제 RLS | ✅ (authenticated DELETE 204 확인) |
 | 0008_role_from_app_meta | 가입 role을 app_metadata에서만 신뢰(무단 보건교사 가입 차단) | ✅ **적용+env 설정 완료(2026-07-11)** — `/api/token` 400(≠501) 확인 = 토큰 게이트 활성. 신규 보건교사 가입은 서버 생성(role=nurse) |
-| 0009_rls_staff_scope | visits·visit_links 조회/수정/삭제·app_state 쓰기를 nurse/edu 역할로 제한(`is_staff()`) | ✅ **적용 완료(2026-07-29)** |
+| 0009_rls_staff_scope | visits·visit_links 조회/수정/삭제·app_state 쓰기를 nurse/edu 역할로 제한(`is_staff()`) | ✅ **적용+라이브 실검증(2026-07-29)** — nurse: is_staff=true·visits SELECT 200/DELETE 204 / anon: 키오스크 INSERT 201·visits·links SELECT 0행차단 / **teacher(로그인): is_staff=false·visits SELECT 0행차단(기존 구멍 폐쇄)** |
 | 0010_relay_nurse_inbox | 교사→보건교사 relay 채널(보건실 요청·전학 안내) | ✅ **적용+실검증 완료(2026-07-15)** — 교사 발신→보건교사 수신·접수·방문생성 라이브 확인 |
-| 0011_profile_class_from_app_meta | 가입 트리거가 app_metadata의 grade·classNo도 profiles에 기록(담임교사 계정) | ✅ **적용 완료(2026-07-29)** — 담임교사 계정 라이브 가입 가능 |
+| 0011_profile_class_from_app_meta | 가입 트리거가 app_metadata의 grade·classNo도 profiles에 기록(담임교사 계정) | ✅ **적용+라이브 실검증(2026-07-29)** — teacher@naum.kr 프로필에 role=teacher·grade=1·class_no=1 확인, 담임 화면이 "1학년 1반" 정확히 잡음 |
 
 ## 6. 실행/빌드
 ```
