@@ -67,6 +67,8 @@ function treatText(symptom: string, treat: string, outcome: string, time: string
   const chain = [symptom.trim(), treat.trim(), outcome.trim()].filter(Boolean).join(' → ')
   return chain ? `${chain} (${time})` : `(${time})`
 }
+/** 관찰 결과 표기 — "관찰 30분 (~13:30)"(지속시간 + 종료 예정시각). */
+const observeLabel = (durMin: number, endHHMM: string) => `관찰 ${durMin}분 (~${endHHMM})`
 
 /** 오늘: 로컬 실제 방문에서 응급처치 항목 작성(이름·반은 로컬에서만). */
 export function realEntries(date: Date, visits: Visit[], studentOf: (id: string) => { name: string; grade: number; classNo: number } | undefined): LogEntry[] {
@@ -87,9 +89,14 @@ export function realEntries(date: Date, visits: Visit[], studentOf: (id: string)
         })
       }
       if (names.length === 0) { names = ['기타']; cats = ['기타'] }
-      const time = hhmm(v.treatedAt ?? v.calledAt ?? v.createdAt)
+      const startTs = v.treatedAt ?? v.calledAt ?? v.createdAt
+      const time = hhmm(startTs)
       const symptom = v.symptomTileIds.map((id) => tileById(id)?.label).filter(Boolean).join(', ')
-      return entryFromDiseases(cls, name, v.sex, names, cats, treatText(symptom, v.treatments.join(', '), v.outcome ?? '', time))
+      let outcome = v.outcome ?? ''
+      if (outcome === '관찰' && v.observeUntil) {
+        outcome = observeLabel(Math.max(0, Math.round((v.observeUntil - startTs) / 60000)), hhmm(v.observeUntil))
+      }
+      return entryFromDiseases(cls, name, v.sex, names, cats, treatText(symptom, v.treatments.join(', '), outcome, time))
     })
 }
 
@@ -135,7 +142,12 @@ export function synthEntries(date: Date): LogEntry[] {
     // 처치 시간(09:00~15:00, 결정적, 연번 순으로 증가)
     const mins = 540 + Math.floor((i / Math.max(1, count - 1)) * 360 + frac(seed, i + 11) * 20)
     const time = `${pad2(Math.floor(mins / 60))}:${pad2(mins % 60)}`
-    const outcome = SYNTH_OUTCOMES[Math.floor(frac(seed, i + 5) * SYNTH_OUTCOMES.length) % SYNTH_OUTCOMES.length]
+    let outcome = SYNTH_OUTCOMES[Math.floor(frac(seed, i + 5) * SYNTH_OUTCOMES.length) % SYNTH_OUTCOMES.length]
+    if (outcome === '관찰') {
+      const dur = 20 + Math.floor(frac(seed, i + 33) * 3) * 10 // 20/30/40분
+      const end = mins + dur
+      outcome = observeLabel(dur, `${pad2(Math.floor(end / 60))}:${pad2(end % 60)}`)
+    }
     entries.push(entryFromDiseases(`${st.grade}-${st.classNo}`, st.name, st.sex, names, cats, treatText(d0.sym, d0.treat, outcome, time)))
   }
   return entries
