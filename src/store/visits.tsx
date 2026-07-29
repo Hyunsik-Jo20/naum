@@ -17,6 +17,7 @@ import * as sb from '../api/supabaseBackend'
 import * as offline from '../data/offline'
 import { tileById } from '../data/mock'
 import { loadNotifyTargets } from '../data/notifyTargets'
+import { emitParent } from '../data/parentNotify'
 
 /**
  * 로컬/서버 분리 — 세 가지 모드로 동작(우선순위 supabase > backend > local):
@@ -340,7 +341,7 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
           // 알림 대상 설정(담임/학부모)에 따라 발송
           const nt = loadNotifyTargets()
           if (nt.teacher) offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: { kind: '접수', sym, number: student.number }, ts: v.createdAt })
-          if (nt.parent) offline.run({ type: 'emitStudent', studentId: student.id, payload: { kind: '접수', sym }, ts: v.createdAt })
+          if (nt.parent) emitParent(student.id, { kind: '접수', sym }, v.createdAt)
         } else if (modeRef.current === 'backend') void apiCreateVisit(v, student.id)
         return v
       },
@@ -390,7 +391,7 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
             }
             const nt = loadNotifyTargets()
             if (nt.teacher) offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: p, ts: treatedAt })
-            if (nt.parent) offline.run({ type: 'emitStudent', studentId: student.id, payload: p, ts: treatedAt })
+            if (nt.parent) emitParent(student.id, p, treatedAt)
           }
         } else if (modeRef.current === 'backend') void apiPatchVisit(id, full)
       },

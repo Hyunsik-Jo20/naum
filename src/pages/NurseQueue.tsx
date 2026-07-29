@@ -9,6 +9,8 @@ import LoginTokenModal from '../components/LoginTokenModal'
 import ObserveResolveModal from '../components/ObserveResolveModal'
 import ObservePickerModal from '../components/ObservePickerModal'
 import { loadNotifyTargets, saveNotifyTargets } from '../data/notifyTargets'
+import ParentNotifyModal from '../components/ParentNotifyModal'
+import { flushDue, parentNotifySummary } from '../data/parentNotify'
 import { loadRequests, subscribeRequests, removeRequest, type NurseInboxItem } from '../data/nurseRequest'
 import { roster, saveRoster } from '../data/localRoster'
 import { fetchCurrent, type CurrentWeather } from '../data/weatherApi'
@@ -42,6 +44,8 @@ export default function NurseQueue() {
   const [extendId, setExtendId] = useState<string | null>(null) // 관찰 연장 대상
   const [requests, setRequests] = useState<NurseInboxItem[]>([]) // 교사 보건실 요청·전학 안내
   const [notifyT, setNotifyT] = useState(() => loadNotifyTargets())
+  const [showParentNotify, setShowParentNotify] = useState(false)
+  const [parentSummary, setParentSummary] = useState(() => parentNotifySummary())
   const [, setTick] = useState(0) // 관찰 남은시간 갱신·종료 감지용 주기 리렌더
 
   function toggleNotify(key: 'teacher' | 'parent') {
@@ -55,6 +59,14 @@ export default function NurseQueue() {
   // 관찰 시간 카운트다운/종료 감지 — 20초마다 리렌더
   useEffect(() => {
     const t = window.setInterval(() => setTick((x) => x + 1), 20000)
+    return () => window.clearInterval(t)
+  }, [])
+
+  // 학부모 알림 배치 스케줄러 — 마운트 시 catch-up + 30초마다 지정 시각 도래분 발송.
+  //  (실시간 모드면 flushDue는 no-op.) 콘솔이 켜져 있는 동안 동작.
+  useEffect(() => {
+    flushDue()
+    const t = window.setInterval(() => flushDue(), 30000)
     return () => window.clearInterval(t)
   }, [])
 
@@ -217,6 +229,17 @@ export default function NurseQueue() {
               <label className={`nt-chip ${notifyT.parent ? 'on' : ''}`}>
                 <input type="checkbox" checked={notifyT.parent} onChange={() => toggleNotify('parent')} /> 학부모
               </label>
+              {notifyT.parent && (
+                <button
+                  type="button"
+                  className="nt-chip"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setShowParentNotify(true)}
+                  title="학부모 알림을 실시간 대신 특정 시간에 모아 보낼 수 있습니다"
+                >
+                  <i className="ti ti-clock-hour-4" aria-hidden="true" /> 학부모 발송: {parentSummary}
+                </button>
+              )}
             </div>
             {/* 앵커 + target=_blank — window.open(크기지정)은 팝업 차단 대상이라 링크로 새 탭/창을 연다 */}
             <a
@@ -431,6 +454,7 @@ export default function NurseQueue() {
 
       {showAdd && <AddVisitModal onClose={() => setShowAdd(false)} onSubmit={handleAdd} />}
       {showToken && <LoginTokenModal onClose={() => setShowToken(false)} />}
+      {showParentNotify && <ParentNotifyModal onClose={() => { setShowParentNotify(false); setParentSummary(parentNotifySummary()) }} />}
       {resolveId && (
         <ObserveResolveModal
           name={nameOf(visits.find((v) => v.id === resolveId) ?? ({} as Visit))}
