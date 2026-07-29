@@ -112,9 +112,20 @@ VITE_SUPABASE_ANON_KEY=eyJ...
 3. 확인: 보건교사 콘솔 이름 복원·교사/학부모 알림 정상.
 
 **Phase 2 — 번들에서 비밀 제거(실제 수정 완료)**
+
+> ✅ **전제 검증 완료(2026-07-29)**: 서버 발급 키(`/api/keys`, `SCHOOL_MASTER_SECRET` 파생)가 로컬 파생 키(`VITE_SCHOOL_LINK_SECRET`)와 **바이트 동일** 확인 — links·class:1-1·student 키·class 토큰 프리픽스 전부 일치. 즉 두 비밀 값이 동일 → **클라 env 제거해도 기존 암호문 그대로 복호(무손실)**. 배포 번들 `index-*.js`에 비밀이 현재 존재함도 확인(제거 대상).
+
 4. Phase 1이 정상 확인되면, 클라이언트 env에서 **`VITE_SCHOOL_LINK_SECRET` 제거** 후 재배포.
+   - Vercel → Project → Settings → Environment Variables → `VITE_SCHOOL_LINK_SECRET` 삭제(**Production·Preview 모두**) → Save.
+   - **재배포는 반드시 새 빌드로**: Deployments → 최신 → Redeploy 시 **"Use existing Build Cache" 체크 해제**(캐시 재사용하면 옛 번들에 비밀이 남음). 또는 아무 커밋이나 push해서 새 빌드 유발.
    → 번들에 마스터 비밀이 더는 없음. 이후 키는 **오직 서버 발급**(비인증 추출 불가, 학부모는 자녀 키만).
-5. 트레이드오프: 서버가 마스터 비밀을 보유(기술적으로 복호 가능) — "서버 복호 불가"에서 "서버가 키를 쥐지만 스코프·인증으로 제한"으로 신뢰 모델 변경. 완전 E2E는 교사·학부모 계정 모델 대변경이 필요해 후속.
+5. **검증(제거 후)**: 아래 명령으로 번들에서 비밀이 사라졌는지 확인 + 앱에서 이름복원·교사/학부모 알림 정상 확인.
+   ```bash
+   # .env.local의 비밀 문자열이 배포 번들에 남아있는지 검사(NO여야 성공)
+   node -e 'const https=require("https"),fs=require("fs");const s=(fs.readFileSync(".env.local","utf8").match(/VITE_SCHOOL_LINK_SECRET=(.*)/)||[])[1].trim();const g=u=>new Promise(r=>https.get(u,x=>{let d="";x.on("data",c=>d+=c);x.on("end",()=>r(d))}));(async()=>{const h=await g("https://naum-kappa.vercel.app/");const a=[...new Set([...h.matchAll(/\/assets\/([\w\-]+\.js)/g)].map(m=>m[1]))];let f=null;for(const x of a){if((await g("https://naum-kappa.vercel.app/assets/"+x)).includes(s)){f=x;break}}console.log("secret in bundle:",f?"YES "+f:"NO ✅")})()'
+   ```
+   - ⚠️ 레거시(non-`v1.`) 로그인 토큰은 클라 SECRET로 복호하므로, 비밀 제거 후엔 **기존에 발급한 옛 교사/학부모 토큰이 안 풀릴 수 있음**. 서버 `v1.` 토큰으로 재발급(로그인 토큰 모달에서 새로 발급)하면 해소. (연수/데모는 토큰 재발급이라 무관.)
+6. 트레이드오프: 서버가 마스터 비밀을 보유(기술적으로 복호 가능) — "서버 복호 불가"에서 "서버가 키를 쥐지만 스코프·인증으로 제한"으로 신뢰 모델 변경. 완전 E2E는 교사·학부모 계정 모델 대변경이 필요해 후속.
 
 ## 6. 점검 체크리스트
 - [ ] 로그인(이메일+비밀번호) 성공 → 역할별 화면 진입
