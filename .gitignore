@@ -9,3 +9,5 @@ server/.data
 .vercel
 # Office/OneDrive 임시 잠금 파일
 ~$*
+# 시연용 로컬 더미 데이터 로더 — 이 기기에서만 사용, 레포/다른 컴퓨터로 공유 안 함
+demo-local/
