@@ -62,10 +62,10 @@ function hhmm(ts: number): string {
   const d = new Date(ts)
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
 }
-/** 처치 문구 끝에 시간대를 괄호로. */
-function withTime(treat: string, time: string): string {
-  const base = treat.trim()
-  return base ? `${base} (${time})` : `(${time})`
+/** "증상 → 처치 (시간)" — 학생이 키오스크에서 입력한 증상과 그에 따른 처치를 함께 기록. */
+function treatText(symptom: string, treat: string, time: string): string {
+  const body = [symptom.trim(), treat.trim()].filter(Boolean).join(' → ')
+  return body ? `${body} (${time})` : `(${time})`
 }
 
 /** 오늘: 로컬 실제 방문에서 응급처치 항목 작성(이름·반은 로컬에서만). */
@@ -88,23 +88,24 @@ export function realEntries(date: Date, visits: Visit[], studentOf: (id: string)
       }
       if (names.length === 0) { names = ['기타']; cats = ['기타'] }
       const time = hhmm(v.treatedAt ?? v.calledAt ?? v.createdAt)
-      return entryFromDiseases(cls, name, v.sex, names, cats, withTime(v.treatments.join(', '), time))
+      const symptom = v.symptomTileIds.map((id) => tileById(id)?.label).filter(Boolean).join(', ')
+      return entryFromDiseases(cls, name, v.sex, names, cats, treatText(symptom, v.treatments.join(', '), time))
     })
 }
 
-const DIAG_POOL: { name: string; cat: string; treat: string }[] = [
-  { name: '두통', cat: '정신신경계', treat: '안정 및 휴식, 체온측정' },
-  { name: '복통', cat: '소화기계', treat: '안정 및 휴식, 따뜻한 물' },
-  { name: '외상', cat: '피부피하계', treat: '소독 및 밴드' },
-  { name: '타박상', cat: '근골격계', treat: '냉찜질' },
-  { name: '감기', cat: '호흡기계', treat: '체온측정, 휴식' },
-  { name: '근육통', cat: '근골격계', treat: '안정 및 관찰' },
-  { name: '비출혈', cat: '이비인후과계', treat: '지혈, 안정' },
-  { name: '충혈', cat: '안과계', treat: '세안, 관찰' },
-  { name: '피부질환', cat: '피부피하계', treat: '연고 도포' },
-  { name: '치통', cat: '구강치아계', treat: '관찰, 병원 안내' },
-  { name: '염좌', cat: '근골격계', treat: '냉찜질, 압박' },
-  { name: '어지러움', cat: '정신신경계', treat: '안정 및 휴식' },
+const DIAG_POOL: { name: string; cat: string; sym: string; treat: string }[] = [
+  { name: '두통', cat: '정신신경계', sym: '머리가 아파요', treat: '안정 및 휴식, 체온측정' },
+  { name: '복통', cat: '소화기계', sym: '배가 아파요', treat: '안정 및 휴식, 따뜻한 물' },
+  { name: '외상', cat: '피부피하계', sym: '넘어져서 다쳤어요', treat: '소독 및 밴드' },
+  { name: '타박상', cat: '근골격계', sym: '부딪혔어요', treat: '냉찜질' },
+  { name: '감기', cat: '호흡기계', sym: '열이 나요', treat: '체온측정, 휴식' },
+  { name: '근육통', cat: '근골격계', sym: '팔다리가 아파요', treat: '안정 및 관찰' },
+  { name: '비출혈', cat: '이비인후과계', sym: '코피가 나요', treat: '지혈, 안정' },
+  { name: '충혈', cat: '안과계', sym: '눈이 아파요', treat: '세안, 관찰' },
+  { name: '피부질환', cat: '피부피하계', sym: '피부가 가려워요', treat: '연고 도포' },
+  { name: '치통', cat: '구강치아계', sym: '이가 아파요', treat: '관찰, 병원 안내' },
+  { name: '염좌', cat: '근골격계', sym: '발목을 삐었어요', treat: '냉찜질, 압박' },
+  { name: '어지러움', cat: '정신신경계', sym: '어지러워요', treat: '안정 및 휴식' },
 ]
 
 function frac(a: number, b: number): number {
@@ -131,7 +132,7 @@ export function synthEntries(date: Date): LogEntry[] {
     // 처치 시간(09:00~15:00, 결정적, 연번 순으로 증가)
     const mins = 540 + Math.floor((i / Math.max(1, count - 1)) * 360 + frac(seed, i + 11) * 20)
     const time = `${pad2(Math.floor(mins / 60))}:${pad2(mins % 60)}`
-    entries.push(entryFromDiseases(`${st.grade}-${st.classNo}`, st.name, st.sex, names, cats, withTime(d0.treat, time)))
+    entries.push(entryFromDiseases(`${st.grade}-${st.classNo}`, st.name, st.sex, names, cats, treatText(d0.sym, d0.treat, time)))
   }
   return entries
 }
@@ -211,7 +212,7 @@ function dayBlockCells(blockStart: number, date: Date, entries: LogEntry[], stat
   put(7, { col: C(F.NAME), value: '이  름', across: 3, style: 'hdr' })
   put(7, { col: C(F.SEX), value: '성별', style: 'hdr' })
   put(7, { col: C(F.DIAG), value: '병명', across: 3, style: 'hdr' })
-  put(7, { col: C(F.TREAT), value: '처               치', across: 17, style: 'hdr' })
+  put(7, { col: C(F.TREAT), value: '증상 및 처치', across: 17, style: 'hdr' })
 
   // 행8~37: 응급처치 항목
   for (let i = 0; i < ENTRY_ROWS; i++) {
