@@ -6,7 +6,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { SCHOOL } from '../data/location'
 import { students } from '../data/mock'
 import { supabase, SUPABASE_ENABLED } from '../data/supabaseClient'
-import { verifyLoginToken, serverSignupNurse } from '../data/tokenApi'
+import { verifyLoginToken, serverSignupNurse, serverSignupTeacher } from '../data/tokenApi'
 import { setTokenAuth, clearKeyCache } from '../data/schoolCrypto'
 
 export { SUPABASE_ENABLED }
@@ -88,6 +88,8 @@ interface AuthCtx {
     token: string,
     info: { name: string; email: string; password: string },
   ) => Promise<string | null>
+  // 담임교사 가입 — 보건교사가 발급한 담임 토큰 + 비밀번호(이메일 없이 학반 합성 계정).
+  signupTeacher: (token: string, info: { name: string; password: string }) => Promise<string | null>
   // 데모(로컬) 모드 — 역할별 PIN 1234.
   loginNurse: (name: string, pin: string) => string | null
   loginEdu: (id: string, pw: string) => string | null
@@ -262,6 +264,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return '이미 가입된 이메일입니다. 기존 비밀번호로 로그인하세요. (비밀번호 변경은 관리자/비밀번호 재설정으로)'
         }
         return null
+      },
+      // 담임교사 가입 — 보건교사가 발급한 담임 토큰 + 비밀번호. 서버가 학반 합성 계정 생성.
+      signupTeacher: async (token, info) => {
+        if (!supabase) return '클라우드 인증이 설정되지 않았습니다.'
+        if (!info.password || info.password.length < 6) return '비밀번호는 6자 이상으로 설정하세요.'
+        const srv = await serverSignupTeacher(token, info.password, info.name.trim())
+        if (srv.ok) return null
+        if (srv.error === 'exists') return '이미 가입된 반입니다. 학년·반 + 비밀번호로 로그인하세요.'
+        if (srv.error === 'bad_token') return '담임 토큰이 올바르지 않습니다. 보건교사에게 받은 토큰을 확인하세요.'
+        if (srv.error === 'not_configured') return '서버 인증이 아직 설정되지 않았습니다. 관리자에게 문의하세요.'
+        return srv.error === 'network' ? '네트워크 오류로 가입에 실패했습니다.' : `가입 실패: ${srv.error}`
       },
       // 데모: PIN 1234
       loginNurse: (name, pin) => {

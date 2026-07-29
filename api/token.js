@@ -129,12 +129,28 @@ export default async function handler(req, res) {
 
     if (action === 'signup') {
       const p = verifyToken(body.token, SECRET)
-      if (!p || p.r !== 'n') return res.status(403).json({ error: 'bad_token' })
-      const email = String(body.email || '').trim()
+      if (!p || (p.r !== 'n' && p.r !== 't')) return res.status(403).json({ error: 'bad_token' })
       const password = String(body.password || '')
-      const name = String(body.name || '').trim() || '보건교사'
-      if (!email || password.length < 6) return res.status(400).json({ error: 'bad_input' })
-      // service-role로 계정 생성 — role은 app_metadata(클라이언트가 조작 불가)로 지정.
+      const name = String(body.name || '').trim()
+      if (password.length < 6) return res.status(400).json({ error: 'bad_input' })
+
+      let email, app_metadata, uName
+      if (p.r === 'n') {
+        // 보건교사: 이메일 직접 입력.
+        email = String(body.email || '').trim()
+        if (!email) return res.status(400).json({ error: 'bad_input' })
+        app_metadata = { role: 'nurse', org: p.org || '' }
+        uName = name || '보건교사'
+      } else {
+        // 담임교사: 학년/반으로 결정적 합성 이메일(teacherAuth.ts와 동일 규칙).
+        const g = Number(p.g), c = Number(p.c)
+        if (!g || !c) return res.status(403).json({ error: 'bad_token' })
+        const schoolId = process.env.SCHOOL_ID || process.env.VITE_SCHOOL_ID || 'demo'
+        email = `t${g}-${c}@${schoolId}.naum.kr`
+        app_metadata = { role: 'teacher', grade: g, classNo: c }
+        uName = name || `${g}-${c} 담임`
+      }
+      // service-role로 계정 생성 — role/학반은 app_metadata(클라이언트 조작 불가)로 지정.
       const cr = await fetch(`${SB_URL}/auth/v1/admin/users`, {
         method: 'POST',
         headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}`, 'content-type': 'application/json' },
@@ -142,8 +158,8 @@ export default async function handler(req, res) {
           email,
           password,
           email_confirm: true, // 토큰이 곧 인가 → 즉시 로그인 가능(이메일 확인 대체)
-          user_metadata: { name },
-          app_metadata: { role: 'nurse', org: p.org || '' },
+          user_metadata: { name: uName },
+          app_metadata,
         }),
       })
       if (cr.ok) return res.status(200).json({ ok: true })

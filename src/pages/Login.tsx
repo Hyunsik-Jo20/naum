@@ -3,7 +3,18 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth, type Role } from '../store/auth'
 import { SCHOOL } from '../data/location'
 import { classes } from '../data/mock'
+import { teacherEmail } from '../data/teacherAuth'
 import InstallButton from '../components/InstallButton'
+
+// v1 서명 토큰의 payload를 로컬에서 읽기(검증 아님, 학반 표시용). 위조는 서버 HMAC이 막음.
+function readTokenPayload(token: string): { r?: string; g?: number; c?: number } | null {
+  try {
+    const seg = token.trim().split('.')[1]
+    return JSON.parse(atob(seg.replace(/-/g, '+').replace(/_/g, '/')))
+  } catch {
+    return null
+  }
+}
 
 const roleHome = (r: Role) => (r === 'edu' ? '/edu' : r === 'teacher' ? '/teacher' : r === 'parent' ? '/parent' : '/')
 
@@ -24,7 +35,7 @@ const TABS: { role: Role; label: string; icon: string }[] = [
 ]
 
 export default function Login() {
-  const { loginNurse, loginEdu, loginTeacher, loginParent, loginPassword, loginToken, signupNurse, authMode, session } = useAuth()
+  const { loginNurse, loginEdu, loginTeacher, loginParent, loginPassword, loginToken, signupNurse, signupTeacher, authMode, session } = useAuth()
   const nav = useNavigate()
   const [tab, setTab] = useState<Role>('nurse')
   const [email, setEmail] = useState('')
@@ -39,6 +50,10 @@ export default function Login() {
   const [tkClass, setTkClass] = useState(1)
   const [tkChild, setTkChild] = useState('')
   const [tkName, setTkName] = useState('')
+  // 담임교사 계정(학년/반 + 비번). teacherMode: 로그인 vs 가입
+  const [teacherMode, setTeacherMode] = useState<'login' | 'signup'>('login')
+  const [tPw, setTPw] = useState('') // 담임 로그인 비번
+  const [tSuPw, setTSuPw] = useState('') // 담임 가입 비번
   // 보건교사 회원가입
   const [staffView, setStaffView] = useState<'login' | 'signup'>('login')
   const [suToken, setSuToken] = useState('')
@@ -129,6 +144,29 @@ export default function Login() {
   }
   const tkClassNos = classes.filter((c) => Number(c.split('-')[0]) === tkGrade).map((c) => Number(c.split('-')[1])).sort((a, b) => a - b)
 
+  // 담임교사 계정 로그인 — 학년/반으로 합성 이메일 도출.
+  async function doTeacherLogin() {
+    setErr(''); setSuMsg('')
+    if (!tPw) return setErr('비밀번호를 입력하세요.')
+    applyPersist(); setBusy(true)
+    const e = await loginPassword(teacherEmail(tkGrade, tkClass), tPw)
+    setBusy(false)
+    if (e) return setErr(/이메일 또는 비밀번호/.test(e) ? '학년·반 또는 비밀번호가 올바르지 않습니다.' : e)
+  }
+  // 담임교사 가입 — 보건교사 발급 토큰 + 비번. 반은 토큰이 결정.
+  async function doTeacherSignup() {
+    setErr(''); setSuMsg('')
+    if (!tk.trim()) return setErr('담임 토큰을 입력하세요.')
+    const p = readTokenPayload(tk)
+    if (!p || p.r !== 't' || !p.g || !p.c) return setErr('담임 토큰이 아닙니다. 보건교사에게 받은 담임용 토큰을 확인하세요.')
+    setBusy(true)
+    const e = await signupTeacher(tk, { name: tkName, password: tSuPw })
+    setBusy(false)
+    if (e) return setErr(e)
+    setTkGrade(p.g); setTkClass(p.c); setTeacherMode('login'); setTPw('')
+    setSuMsg(`가입 완료! ${p.g}학년 ${p.c}반 + 비밀번호로 로그인하세요.`)
+  }
+
   async function submitSignup() {
     setErr('')
     setSuMsg('')
@@ -207,39 +245,63 @@ export default function Login() {
           ) : (
             <>
               <div className="login-tabs grid4" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
-                <button className={`login-tab ${tkRole === 'teacher' ? 'on' : ''}`} onClick={() => { setTkRole('teacher'); setErr('') }}>담임</button>
+                <button className={`login-tab ${tkRole === 'teacher' ? 'on' : ''}`} onClick={() => { setTkRole('teacher'); setErr(''); setSuMsg('') }}>담임</button>
                 <button className={`login-tab ${tkRole === 'parent' ? 'on' : ''}`} onClick={() => { setTkRole('parent'); setErr('') }}>학부모</button>
               </div>
-              <label className="login-field">발급받은 토큰
-                <textarea rows={2} value={tk} placeholder="보건교사에게 받은 토큰 붙여넣기" onChange={(e) => setTk(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 12 }} />
-              </label>
+
               {tkRole === 'teacher' ? (
                 <>
-                  <div className="row" style={{ gap: 8 }}>
-                    <label className="login-field" style={{ flex: 1 }}>학년
-                      <select value={tkGrade} onChange={(e) => setTkGrade(Number(e.target.value))}>
-                        {grades.map((g) => <option key={g} value={g}>{g}학년</option>)}
-                      </select>
-                    </label>
-                    <label className="login-field" style={{ flex: 1 }}>반
-                      <select value={tkClass} onChange={(e) => setTkClass(Number(e.target.value))}>
-                        {tkClassNos.map((c) => <option key={c} value={c}>{c}반</option>)}
-                      </select>
-                    </label>
+                  <div className="login-tabs grid4" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 10 }}>
+                    <button className={`login-tab ${teacherMode === 'login' ? 'on' : ''}`} onClick={() => { setTeacherMode('login'); setErr(''); setSuMsg('') }}>로그인</button>
+                    <button className={`login-tab ${teacherMode === 'signup' ? 'on' : ''}`} onClick={() => { setTeacherMode('signup'); setErr(''); setSuMsg('') }}>담임 가입</button>
                   </div>
-                  <label className="login-field">이름(선택)
-                    <input value={tkName} placeholder="담임 이름" onChange={(e) => setTkName(e.target.value)} />
-                  </label>
+                  {teacherMode === 'signup' ? (
+                    <>
+                      <label className="login-field">담임 토큰
+                        <textarea rows={2} value={tk} placeholder="보건교사에게 받은 담임 토큰 붙여넣기" onChange={(e) => setTk(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 12 }} />
+                      </label>
+                      <label className="login-field">이름(선택)
+                        <input value={tkName} placeholder="담임 이름" onChange={(e) => setTkName(e.target.value)} />
+                      </label>
+                      <label className="login-field">비밀번호 (6자 이상)
+                        <input type="password" value={tSuPw} onChange={(e) => setTSuPw(e.target.value)} />
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <div className="row" style={{ gap: 8 }}>
+                        <label className="login-field" style={{ flex: 1 }}>학년
+                          <select value={tkGrade} onChange={(e) => setTkGrade(Number(e.target.value))}>{grades.map((g) => <option key={g} value={g}>{g}학년</option>)}</select>
+                        </label>
+                        <label className="login-field" style={{ flex: 1 }}>반
+                          <select value={tkClass} onChange={(e) => setTkClass(Number(e.target.value))}>{tkClassNos.map((c) => <option key={c} value={c}>{c}반</option>)}</select>
+                        </label>
+                      </div>
+                      <label className="login-field">비밀번호
+                        <input type="password" value={tPw} onChange={(e) => setTPw(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && doTeacherLogin()} />
+                      </label>
+                    </>
+                  )}
+                  {err && <div className="ai-err" style={{ marginBottom: 12 }}>{err}</div>}
+                  {suMsg && <div className="route-note" style={{ marginBottom: 12 }}>{suMsg}</div>}
+                  <button className="btn primary" style={{ width: '100%', justifyContent: 'center' }} disabled={busy} onClick={teacherMode === 'signup' ? doTeacherSignup : doTeacherLogin}>
+                    <i className={`ti ${teacherMode === 'signup' ? 'ti-user-plus' : 'ti-login'}`} aria-hidden="true" /> {busy ? '확인 중…' : teacherMode === 'signup' ? '담임 가입' : '로그인'}
+                  </button>
                 </>
               ) : (
-                <label className="login-field">자녀 이름
-                  <input value={tkChild} placeholder="자녀 이름 (토큰과 일치해야 함)" onChange={(e) => setTkChild(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submitToken()} />
-                </label>
+                <>
+                  <label className="login-field">발급받은 토큰
+                    <textarea rows={2} value={tk} placeholder="보건교사에게 받은 토큰 붙여넣기" onChange={(e) => setTk(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 12 }} />
+                  </label>
+                  <label className="login-field">자녀 이름
+                    <input value={tkChild} placeholder="자녀 이름 (토큰과 일치해야 함)" onChange={(e) => setTkChild(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submitToken()} />
+                  </label>
+                  {err && <div className="ai-err" style={{ marginBottom: 12 }}>{err}</div>}
+                  <button className="btn primary" style={{ width: '100%', justifyContent: 'center' }} disabled={busy} onClick={submitToken}>
+                    <i className="ti ti-login" aria-hidden="true" /> {busy ? '확인 중…' : '로그인'}
+                  </button>
+                </>
               )}
-              {err && <div className="ai-err" style={{ marginBottom: 12 }}>{err}</div>}
-              <button className="btn primary" style={{ width: '100%', justifyContent: 'center' }} disabled={busy} onClick={submitToken}>
-                <i className="ti ti-login" aria-hidden="true" /> {busy ? '확인 중…' : '로그인'}
-              </button>
             </>
           )}
 

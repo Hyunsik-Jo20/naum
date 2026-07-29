@@ -104,3 +104,24 @@ export async function serverSignupNurse(
   if (r.status === 409) return { ok: false, error: 'exists' }
   return { ok: false, error: j.error || 'signup_failed' }
 }
+
+/** 담임교사 가입 — 토큰(r:'t')으로 서버가 학반 합성 이메일 계정 생성(이메일 입력 불필요). */
+export async function serverSignupTeacher(token: string, password: string, name: string): Promise<ServerSignupResult> {
+  const t = (token || '').trim()
+  if (!(SUPABASE_ENABLED && t.startsWith('v1.'))) return { ok: false, error: 'not_configured' }
+  let r: Response | null = null
+  try {
+    r = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'signup', token: t, password, name }),
+    })
+  } catch {
+    return { ok: false, error: 'network' }
+  }
+  if (r.ok) return { ok: true }
+  const j = await r.json().catch(() => ({}))
+  if (r.status === 409) return { ok: false, error: 'exists' }
+  if (r.status === 501) return { ok: false, error: 'not_configured' }
+  return { ok: false, error: j.error || 'signup_failed' }
+}
