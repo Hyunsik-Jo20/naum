@@ -16,7 +16,14 @@ export default defineConfig(({ mode }) => {
       // PWA — 앱 셸을 서비스워커로 캐시해 설치형(APK처럼) + 오프라인 실행.
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['icon.svg'],
+        includeAssets: [
+          'icon.svg',
+          'images/kiosk-calm-bg.png',
+          'images/kiosk-calm-bg-portrait.png',
+          'images/kiosk-roster-bg.png',
+          'images/kiosk-roster-bg-portrait.png',
+          'images/kiosk-symptom-empathy.png',
+        ],
         manifest: {
           name: '나음 — 보건실 디지털 전환 플랫폼',
           short_name: '나음',

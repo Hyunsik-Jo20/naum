@@ -20,6 +20,7 @@ export default function Kiosk() {
   const [selected, setSelected] = useState<string[]>([])
   const [ticket, setTicket] = useState<number>(0)
   const [byQr, setByQr] = useState(false)
+  const visualStep = step === 'symptom' ? 'symptom' : step === 'id' && pickedClass ? 'roster' : 'welcome'
 
   function reset() {
     setStep('id')
@@ -56,12 +57,23 @@ export default function Kiosk() {
   }
 
   return (
-    <div className="kiosk">
-      <div className="row between" style={{ marginBottom: 16 }}>
-        <Link to="/" className="btn ghost">
+    <div className={`kiosk kiosk-${visualStep}`}>
+      <div className="kiosk-topbar">
+        <Link to="/" className="btn ghost kiosk-exit">
           <i className="ti ti-arrow-left" aria-hidden="true" /> 나가기
         </Link>
-        <span className="tag">보건실 키오스크</span>
+        <div className="kiosk-brand" aria-label="보건실 키오스크">
+          <span className="kiosk-brand-icon" aria-hidden="true">
+            <i className="ti ti-heart-handshake" />
+          </span>
+          <span>
+            <strong>보건실 키오스크</strong>
+            <small>천천히 골라도 괜찮아요</small>
+          </span>
+        </div>
+        <span className="kiosk-calm-tag">
+          <i className="ti ti-sparkles" aria-hidden="true" /> 편안하게 알려 주세요
+        </span>
       </div>
 
       {step === 'id' && (
@@ -111,12 +123,14 @@ function IdStep({
 }) {
   return (
     <div className="kiosk-card">
+      <div className="kiosk-eyebrow">
+        <i className="ti ti-hand-wave" aria-hidden="true" /> 반가워요!
+      </div>
       <p className="kiosk-q">누구인가요?</p>
       <p className="kiosk-sub">학생증 QR을 찍거나, 우리 반에서 이름을 눌러요</p>
 
       <button
-        className="btn primary"
-        style={{ width: '100%', justifyContent: 'center', marginBottom: 20 }}
+        className="btn primary kiosk-qr"
         onClick={onQr}
       >
         <i className="ti ti-qrcode" aria-hidden="true" /> QR 찍기 (시뮬레이션)
@@ -124,15 +138,17 @@ function IdStep({
 
       {!pickedClass ? (
         <>
-          <p className="muted" style={{ fontSize: 13, margin: '0 0 8px' }}>
+          <p className="kiosk-help">
+            <i className="ti ti-school" aria-hidden="true" />
             또는 우리 반을 골라요 <span style={{ color: 'var(--text-3)' }}>· 위=학년, 옆=반</span>
           </p>
           <ClassMatrix onPick={onPickClass} />
         </>
       ) : (
         <>
-          <div className="row between" style={{ margin: '0 0 8px' }}>
-            <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+          <div className="row between kiosk-roster-head">
+            <p className="kiosk-help" style={{ margin: 0 }}>
+              <i className="ti ti-mood-smile" aria-hidden="true" />
               {pickedClass} — 이름을 눌러요
             </p>
             <button className="btn ghost" onClick={onBack}>
@@ -215,7 +231,7 @@ function SymptomStep({
 }) {
   return (
     <div className="kiosk-card">
-      <div className="row between" style={{ marginBottom: 8 }}>
+      <div className="row between kiosk-student-head">
         <div className="row" style={{ gap: 10 }}>
           <span className="avatar">{student.name[0]}</span>
           <div>
@@ -231,6 +247,20 @@ function SymptomStep({
         </span>
       </div>
 
+      <div className="kiosk-empathy">
+        <img
+          src="/images/kiosk-symptom-empathy.png"
+          alt="배가 불편한 곰의 이야기를 토끼가 곁에서 들어주는 모습"
+        />
+        <div>
+          <strong>아프거나 불편하면 걱정될 수 있어요.</strong>
+          <span>지금 느끼는 것과 가장 비슷한 그림을 천천히 골라요.</span>
+        </div>
+      </div>
+
+      <div className="kiosk-eyebrow">
+        <i className="ti ti-heart" aria-hidden="true" /> 선생님에게 잘 알려 줄게요
+      </div>
       <p className="kiosk-q">어디가 아파요?</p>
       <p className="kiosk-sub">아픈 곳을 모두 눌러요</p>
 
@@ -256,10 +286,7 @@ function SymptomStep({
         })}
       </div>
 
-      <div
-        className="row between"
-        style={{ marginTop: 20, paddingTop: 20, borderTop: '0.5px solid var(--border)' }}
-      >
+      <div className="row between kiosk-selection-bar">
         <span style={{ fontSize: 16, color: 'var(--text-2)' }}>
           <strong style={{ color: 'var(--info)' }}>{selected.length}개</strong> 선택했어요
         </span>
@@ -268,7 +295,7 @@ function SymptomStep({
         </button>
       </div>
 
-      <div className="row" style={{ gap: 12, marginTop: 12 }}>
+      <div className="row kiosk-help-actions">
         <button
           className="btn ghost"
           style={{ flex: 1, justifyContent: 'center' }}
