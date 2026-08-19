@@ -18,11 +18,11 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: [
           'icon.svg',
-          'images/kiosk-calm-bg.png',
-          'images/kiosk-calm-bg-portrait.png',
-          'images/kiosk-roster-bg.png',
-          'images/kiosk-roster-bg-portrait.png',
-          'images/kiosk-symptom-empathy.png',
+          'images/kiosk-calm-bg.webp',
+          'images/kiosk-calm-bg-portrait.webp',
+          'images/kiosk-roster-bg.webp',
+          'images/kiosk-roster-bg-portrait.webp',
+          'images/kiosk-symptom-empathy.webp',
         ],
         manifest: {
           name: '나음 — 보건실 디지털 전환 플랫폼',

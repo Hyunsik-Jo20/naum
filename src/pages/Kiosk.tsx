@@ -249,7 +249,7 @@ function SymptomStep({
 
       <div className="kiosk-empathy">
         <img
-          src="/images/kiosk-symptom-empathy.png"
+          src="/images/kiosk-symptom-empathy.webp"
           alt="배가 불편한 곰의 이야기를 토끼가 곁에서 들어주는 모습"
         />
         <div>

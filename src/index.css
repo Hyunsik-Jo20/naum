@@ -181,7 +181,7 @@ a { color: inherit; text-decoration: none; }
   position: fixed;
   z-index: -2;
   inset: 0;
-  background: #f8fcf8 url('/images/kiosk-calm-bg.png') center / cover no-repeat;
+  background: #f8fcf8 url('/images/kiosk-calm-bg.webp') center / cover no-repeat;
   pointer-events: none;
 }
 .kiosk::after {
@@ -192,7 +192,7 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.2));
   pointer-events: none;
 }
-.kiosk-roster::before { background-image: url('/images/kiosk-roster-bg.png'); }
+.kiosk-roster::before { background-image: url('/images/kiosk-roster-bg.webp'); }
 .kiosk-roster::after {
   background: linear-gradient(180deg, rgba(246,252,255,.08), rgba(237,250,246,.18));
 }
@@ -561,10 +561,10 @@ a { color: inherit; text-decoration: none; }
     min-height: calc(100svh - 48px);
   }
   .kiosk::before {
-    background-image: url('/images/kiosk-calm-bg-portrait.png');
+    background-image: url('/images/kiosk-calm-bg-portrait.webp');
     background-position: center bottom;
   }
-  .kiosk-roster::before { background-image: url('/images/kiosk-roster-bg-portrait.png'); }
+  .kiosk-roster::before { background-image: url('/images/kiosk-roster-bg-portrait.webp'); }
   .kiosk-topbar {
     grid-template-columns: auto 1fr;
     min-height: 62px;
