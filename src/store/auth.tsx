@@ -205,6 +205,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) return '이메일 또는 비밀번호가 올바르지 않습니다.'
         const s = data.user ? await loadProfileSession(data.user.id) : null
         if (!s) return '계정에 역할(프로필)이 설정되어 있지 않습니다. 관리자에게 문의하세요.'
+        // 직원(보건교사/교육청) 로그인은 남아있던 교사/학부모 토큰 세션을 반드시 제거한다.
+        //  (세션 복원·onAuthStateChange가 토큰 세션을 최우선으로 보므로, 안 지우면 새로고침 시
+        //   옛 담임/학부모 세션이 이 로그인을 덮어써 역할이 뒤바뀐다.)
+        cacheTokenSession(null)
+        clearKeyCache() // 교사/학부모 토큰인증·스코프 키 캐시 제거(직원 세션과 섞이지 않게)
         setSession(s)
         cacheSession(s) // 오프라인 복원용
         return null
