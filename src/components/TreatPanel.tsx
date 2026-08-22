@@ -14,6 +14,9 @@ import AiSettingsModal from './AiSettingsModal'
 import TempPickerModal from './TempPickerModal'
 import ObservePickerModal from './ObservePickerModal'
 import BodyMapModal from './BodyMapModal'
+import ItemPickerModal from './ItemPickerModal'
+import { loadMeds, saveMeds } from '../data/meds'
+import { loadSupplies, saveSupplies } from '../data/supplies'
 import { teacherOf } from '../data/teacherRoster'
 import { useVisits } from '../store/visits'
 import type { Disease, Outcome, Visit } from '../types'
@@ -79,6 +82,8 @@ export default function TreatPanel({
   const [tempOpen, setTempOpen] = useState(false)
   const [observeOpen, setObserveOpen] = useState(false)
   const [bodyMapKind, setBodyMapKind] = useState<string | null>(null) // 부위 선택 대상 처치(지혈/밴드·소독)
+  const [medOpen, setMedOpen] = useState(false) // 투약 약 선택 모달
+  const [supplyOpen, setSupplyOpen] = useState(false) // 위생용품·비품 선택 모달
   const [observeMinutes, setObserveMinutes] = useState(visit.observeUntil ? Math.max(10, Math.round((visit.observeUntil - (visit.treatedAt ?? Date.now())) / 60000)) : 30)
   const [outcome, setOutcome] = useState<Outcome>(visit.outcome ?? '교실 복귀')
   const [escort, setEscort] = useState<string[]>(visit.escort ?? ['보건교사'])
@@ -210,6 +215,21 @@ export default function TreatPanel({
   function removeBodyMap(kind: string) {
     setTreatments((p) => p.filter((x) => x !== kind && !x.startsWith(`${kind} (`)))
     setBodyMapKind(null)
+  }
+
+  // 투약(의약품)·위생용품·비품 — 팝업에서 항목 선택. "투약 (타이레놀, 지사제)"처럼 저장(부위 처치와 동일 파싱).
+  const MED_LABEL = '투약'
+  const SUPPLY_LABEL = '위생용품·비품'
+  const isMedTreat = (t: string) => t === MED_LABEL
+  const isSupplyTreat = (t: string) => t === SUPPLY_LABEL
+  function applyPick(kind: string, items: string[]) {
+    setTreatments((p) => {
+      const rest = p.filter((x) => x !== kind && !x.startsWith(`${kind} (`))
+      return items.length ? [...rest, ...items.map((m) => `${kind} (${m})`)] : [...rest, kind]
+    })
+  }
+  function removePick(kind: string) {
+    setTreatments((p) => p.filter((x) => x !== kind && !x.startsWith(`${kind} (`)))
   }
 
   function buildPatch(): Partial<Visit> {
@@ -392,19 +412,26 @@ export default function TreatPanel({
         {treatOrder.map((t, i) => {
           const isTemp = t === TEMP_LABEL
           const isSite = isSiteTreat(t)
-          const on = isTemp ? !!tempTreatment : isSite ? hasKind(t) : treatments.includes(t)
-          // 체온=값 모달, 지혈·밴드소독=인체도 부위 모달, 그 외=단순 토글. 칩에 값/부위 표시.
+          const isMed = isMedTreat(t)
+          const isSupply = isSupplyTreat(t)
+          const isPick = isMed || isSupply
+          const on = isTemp ? !!tempTreatment : (isSite || isPick) ? hasKind(t) : treatments.includes(t)
+          // 체온=값, 지혈·밴드소독=부위, 투약=약, 위생용품·비품=물품 모달. 그 외=단순 토글. 칩에 값/부위/항목 표시.
           const onClick = isTemp
             ? () => (on ? removeTemp() : setTempOpen(true))
             : isSite
               ? () => setBodyMapKind(t)
-              : () => toggleTreatment(t)
-          const siteList = isSite ? sitesOf(t) : []
+              : isMed
+                ? () => setMedOpen(true)
+                : isSupply
+                  ? () => setSupplyOpen(true)
+                  : () => toggleTreatment(t)
+          const detailList = (isSite || isPick) ? sitesOf(t) : []
           const label =
             isTemp && curTemp != null
               ? `${TEMP_LABEL} ${curTemp.toFixed(1)}℃`
-              : isSite && siteList.length
-                ? `${t} (${siteList.join(', ')})`
+              : (isSite || isPick) && detailList.length
+                ? `${t} (${detailList.join(', ')})`
                 : t
           return (
             <button
@@ -416,7 +443,7 @@ export default function TreatPanel({
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => moveTreat(i)}
               onDragEnd={() => setDragIdx(null)}
-              title={isTemp ? '체온 값 선택' : isSite ? '처치 부위 선택' : '드래그해서 순서 변경'}
+              title={isTemp ? '체온 값 선택' : isSite ? '처치 부위 선택' : isMed ? '투약할 약 선택' : isSupply ? '지급할 위생용품·비품 선택' : '드래그해서 순서 변경'}
             >
               <i className="ti ti-grip-vertical grip" aria-hidden="true" />
               {on && <i className="ti ti-check" aria-hidden="true" />} {label}
@@ -551,6 +578,36 @@ export default function TreatPanel({
           onConfirm={(parts) => applyBodyMap(bodyMapKind, parts)}
           onRemove={() => removeBodyMap(bodyMapKind)}
           onClose={() => setBodyMapKind(null)}
+        />
+      )}
+      {medOpen && (
+        <ItemPickerModal
+          title="투약 — 약 선택"
+          icon="ti-pill"
+          hint="투약한 약을 모두 누르세요. 목록은 아래 목록 편집에서 추가·삭제할 수 있습니다(이 기기에 저장)."
+          addPlaceholder="약 이름 추가 (예: 파스, 소독약)"
+          removeLabel="투약 해제"
+          initial={sitesOf(MED_LABEL)}
+          load={loadMeds}
+          save={saveMeds}
+          onConfirm={(items) => { applyPick(MED_LABEL, items); setMedOpen(false) }}
+          onRemove={() => { removePick(MED_LABEL); setMedOpen(false) }}
+          onClose={() => setMedOpen(false)}
+        />
+      )}
+      {supplyOpen && (
+        <ItemPickerModal
+          title="위생용품·비품 지급"
+          icon="ti-first-aid-kit"
+          hint="지급한 위생용품·비품을 모두 누르세요(의약품 아님). 목록은 아래 목록 편집에서 추가·삭제할 수 있습니다."
+          addPlaceholder="물품 이름 추가 (예: 붕대, 반창고)"
+          removeLabel="지급 해제"
+          initial={sitesOf(SUPPLY_LABEL)}
+          load={loadSupplies}
+          save={saveSupplies}
+          onConfirm={(items) => { applyPick(SUPPLY_LABEL, items); setSupplyOpen(false) }}
+          onRemove={() => { removePick(SUPPLY_LABEL); setSupplyOpen(false) }}
+          onClose={() => setSupplyOpen(false)}
         />
       )}
     </div>

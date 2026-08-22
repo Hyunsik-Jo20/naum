@@ -84,6 +84,7 @@ export const treatmentTemplates: string[] = [
   '밴드·소독',
   '안약 점안',
   '경과 관찰',
+  '위생용품·비품',
   '보호자 연락',
   '기타',
 ]
