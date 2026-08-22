@@ -49,7 +49,7 @@ export default function Principal() {
   const todayClosed = saved[todayKey]
   const todayReport = todayClosed ?? todayLive
 
-  const reports = useMemo(() => monthReports(now, saved, todayLive), [now, saved, todayLive])
+  const reports = useMemo(() => monthReports(now, saved, todayLive, visits), [now, saved, todayLive, visits])
   const opDays = reports.filter((r) => r.operating)
   const monthTotal = opDays.reduce((a, r) => a + r.total, 0)
 

@@ -2,7 +2,6 @@
 // 규칙: 병명 여러 개 → 병명칸엔 모두 표시, 통계엔 "첫 번째 병명"만 집계.
 import type { Sex, Visit } from '../types'
 import { tileById } from '../data/mock'
-import { roster } from '../data/roster'
 import { holidayName, isOperatingDay } from '../data/holidays'
 import type { XCell, XRow, XSheet } from './excel'
 
@@ -100,66 +99,13 @@ export function realEntries(date: Date, visits: Visit[], studentOf: (id: string)
     })
 }
 
-const DIAG_POOL: { name: string; cat: string; sym: string; treat: string }[] = [
-  { name: '두통', cat: '정신신경계', sym: '머리가 아파요', treat: '안정 및 휴식, 체온측정' },
-  { name: '복통', cat: '소화기계', sym: '배가 아파요', treat: '안정 및 휴식, 따뜻한 물' },
-  { name: '외상', cat: '피부피하계', sym: '넘어져서 다쳤어요', treat: '소독 및 밴드' },
-  { name: '타박상', cat: '근골격계', sym: '부딪혔어요', treat: '냉찜질' },
-  { name: '감기', cat: '호흡기계', sym: '열이 나요', treat: '체온측정, 휴식' },
-  { name: '근육통', cat: '근골격계', sym: '팔다리가 아파요', treat: '안정 및 관찰' },
-  { name: '비출혈', cat: '이비인후과계', sym: '코피가 나요', treat: '지혈, 안정' },
-  { name: '충혈', cat: '안과계', sym: '눈이 아파요', treat: '세안, 관찰' },
-  { name: '피부질환', cat: '피부피하계', sym: '피부가 가려워요', treat: '연고 도포' },
-  { name: '치통', cat: '구강치아계', sym: '이가 아파요', treat: '관찰, 병원 안내' },
-  { name: '염좌', cat: '근골격계', sym: '발목을 삐었어요', treat: '냉찜질, 압박' },
-  { name: '어지러움', cat: '정신신경계', sym: '어지러워요', treat: '안정 및 휴식' },
-]
-
-// 과거일 합성용 처치결과(교실 복귀 위주, 가끔 귀가·관찰·병원).
-const SYNTH_OUTCOMES = ['교실 복귀', '교실 복귀', '교실 복귀', '교실 복귀', '귀가', '관찰', '병원 이송']
-
-function frac(a: number, b: number): number {
-  const x = Math.sin(a * 53.7 + b * 19.1) * 43758.5453
-  return x - Math.floor(x)
-}
-
-/** 과거일: 결정적 합성 응급처치 항목(이름은 명부에서). */
-export function synthEntries(date: Date): LogEntry[] {
-  if (!isOperatingDay(date)) return []
-  const seed = date.getDate() + (date.getMonth() + 1) * 40
-  const count = 10 + Math.floor(frac(seed, 1) * 13)
-  const entries: LogEntry[] = []
-  for (let i = 0; i < count; i++) {
-    const st = roster[Math.floor(frac(seed, i + 2) * roster.length) % roster.length]
-    const d0 = DIAG_POOL[Math.floor(frac(seed, i + 50) * DIAG_POOL.length) % DIAG_POOL.length]
-    const names = [d0.name]
-    const cats = [d0.cat]
-    // 가끔(약 18%) 병명 2개 — 통계는 첫 번째만 잡힘
-    if (frac(seed, i + 99) > 0.82) {
-      const d1 = DIAG_POOL[Math.floor(frac(seed, i + 77) * DIAG_POOL.length) % DIAG_POOL.length]
-      if (d1.name !== d0.name) { names.push(d1.name); cats.push(d1.cat) }
-    }
-    // 처치 시간(09:00~15:00, 결정적, 연번 순으로 증가)
-    const mins = 540 + Math.floor((i / Math.max(1, count - 1)) * 360 + frac(seed, i + 11) * 20)
-    const time = `${pad2(Math.floor(mins / 60))}:${pad2(mins % 60)}`
-    let outcome = SYNTH_OUTCOMES[Math.floor(frac(seed, i + 5) * SYNTH_OUTCOMES.length) % SYNTH_OUTCOMES.length]
-    if (outcome === '관찰') {
-      const dur = 20 + Math.floor(frac(seed, i + 33) * 3) * 10 // 20/30/40분
-      const end = mins + dur
-      outcome = observeLabel(dur, `${pad2(Math.floor(end / 60))}:${pad2(end % 60)}`)
-    }
-    entries.push(entryFromDiseases(`${st.grade}-${st.classNo}`, st.name, st.sex, names, cats, treatText(d0.sym, d0.treat, outcome, time)))
-  }
-  return entries
-}
-
 export function dateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-// ── 통계 누계 베이스라인(업로드 표본의 누계값 — 연초~전월 가정) ──
-const BASE_M = [50, 1, 50, 3, 274, 68, 34, 38, 49, 37, 23, 14, 2, 33]
-const BASE_F = [82, 1, 90, 3, 256, 89, 50, 69, 32, 46, 51, 23, 1, 86]
+// ── 통계 누계 베이스라인 — 실제 누적만 집계(임의 baseline 금지). 이 달 실제 방문만 누계됨. ──
+const BASE_M = new Array(14).fill(0)
+const BASE_F = new Array(14).fill(0)
 
 interface DayStat {
   ilgye: { 남: number[]; 여: number[] }
@@ -271,35 +217,10 @@ export interface WeatherInfo { tempC: number; humidity: number; rainMm: number }
 function fmtWx(w: WeatherInfo): string {
   return `기온 ${w.tempC}℃ · 습도 ${w.humidity}% · 강수 ${w.rainMm}mm`
 }
-/** 과거일 합성 날씨(결정적, 6월 기준 온난). */
-function synthWeather(date: Date): WeatherInfo {
-  const seed = date.getDate() + (date.getMonth() + 1) * 40
-  const tempC = Math.round((22 + frac(seed, 3) * 9) * 10) / 10
-  const humidity = Math.round(50 + frac(seed, 5) * 35)
-  const rainMm = frac(seed, 9) > 0.78 ? Math.round(frac(seed, 13) * 80) / 10 : 0
-  return { tempC, humidity, rainMm }
-}
-
-const SYNTH_EDU_NOTICES = [
-  '감염병 예방수칙 안내(손씻기·환기 철저)',
-  '미세먼지 대응 행동요령 안내',
-  '계절 인플루엔자 예방 및 등교중지 기준 안내',
-  '폭염 대비 학생 건강관리 협조',
-  '학생 건강검진 일정 및 협조 안내',
-  '수족구·유행성 결막염 주의 안내',
-]
-
-/** 해당 일자의 교육청 공지 — 실제 발송 공지 우선, 없으면 결정적 합성. */
+/** 해당 일자의 교육청 공지 — 실제 발송 공지만(합성 금지). */
 function eduNoticeFor(date: Date, notices: EduNotice[]): string {
   const dk = dateKey(date)
-  const real = notices.filter((n) => dateKey(new Date(n.ts)) === dk).map((n) => `· ${n.title}`)
-  if (real.length) return real.join('\n')
-  if (!isOperatingDay(date)) return ''
-  const seed = date.getDate() + (date.getMonth() + 1) * 40
-  if (frac(seed, 7) > 0.62) {
-    return `· ${SYNTH_EDU_NOTICES[Math.floor(frac(seed, 8) * SYNTH_EDU_NOTICES.length) % SYNTH_EDU_NOTICES.length]}`
-  }
-  return ''
+  return notices.filter((n) => dateKey(new Date(n.ts)) === dk).map((n) => `· ${n.title}`).join('\n')
 }
 
 /** 선택한 달의 일자별 보건일지를 주(週)별 시트로 생성. 현재 달이면 1일~오늘, 과거 달이면 1일~말일. */
@@ -324,8 +245,8 @@ export function buildBogeonSheets(
   const days: Day[] = []
   for (let d = 1; d <= lastDay; d++) {
     const date = new Date(y, m, d)
-    const isToday = isCurrentMonth && dateKey(date) === todayKey
-    const entries = isToday ? realEntries(date, visits, studentOf) : synthEntries(date)
+    // 실제 방문 기록만 사용(합성/임의 생성 금지 — 증빙 자료). 방문 없는 날은 빈 표.
+    const entries = realEntries(date, visits, studentOf)
     const ilgye = bySexCounts(entries)
     for (let k = 0; k < 14; k++) { runM[k] += ilgye.남[k]; runF[k] += ilgye.여[k] }
     const wolM = ilgye.남.map((_, k) => runM[k] - BASE_M[k])
@@ -360,9 +281,8 @@ export function buildBogeonSheets(
     wdays.forEach((day, di) => {
       const blockStart = 2 + di * STRIDE // 주 내 순서대로 연속 배치(부분 주에서도 정렬 유지)
       const isToday = dateKey(day.date) === todayKey
-      const wx = isOperatingDay(day.date)
-        ? fmtWx(isToday && todayWeather ? todayWeather : synthWeather(day.date))
-        : ''
+      // 날씨는 실제 값만(오늘=측정값). 과거일은 저장된 값이 없으면 비움(임의 생성 금지).
+      const wx = isOperatingDay(day.date) && isToday && todayWeather ? fmtWx(todayWeather) : ''
       const cells = dayBlockCells(blockStart, day.date, day.entries, day.stat, eduNoticeFor(day.date, notices), wx)
       cells.forEach((arr, row) => {
         if (!rowMap.has(row)) rowMap.set(row, [])

@@ -70,61 +70,13 @@ export function reportFromVisits(date: Date, visits: Visit[], source: 'auto' | '
   }
 }
 
-function hash(a: number, b: number): number {
-  const x = Math.sin(a * 91.7 + b * 31.4) * 43758.5453
-  return x - Math.floor(x)
-}
-
-/** 과거일의 합성 일일 보고(결정적). 미운영일은 0. */
-export function synthDailyReport(date: Date): DailyReport {
-  const key = dateKey(date)
-  const operating = isOperatingDay(date)
-  const holiday = holidayName(date)
-  if (!operating) {
-    return { date: key, weekdayIdx: date.getDay(), operating, holiday, total: 0, outcomes: emptyOutcomes(), byCat: new Array(12).fill(0), topCat: '-', notable: [], source: 'synth' }
-  }
-  const seed = date.getDate()
-  const m = date.getMonth() + 1
-  const base = 14 + Math.round(hash(seed, m) * 16) // 일 14~30건
-  const byCat = new Array(12).fill(0)
-  byCat[0] = Math.round(base * 0.32) // 호흡기계
-  byCat[1] = Math.round(base * 0.2) // 소화기계
-  byCat[5] = Math.round(base * 0.16) // 피부피하계
-  byCat[4] = Math.round(base * 0.12) // 근골격계
-  byCat[3] = Math.round(base * 0.08) // 정신신경계
-  byCat[9] = Math.round(base * 0.05) // 안과계
-  byCat[8] = Math.round(base * 0.04) // 이비인후과계
-  byCat[10] = hash(seed, m + 7) > 0.78 ? 1 + Math.round(hash(seed, m) * 2) : 0 // 감염병 가끔
-  byCat[11] = Math.max(0, base - byCat.reduce((a, b) => a + b, 0))
-  const total = byCat.reduce((a, b) => a + b, 0)
-  const hospital = hash(seed, m + 3) > 0.85 ? 1 : 0
-  const home = Math.round(total * 0.12)
-  const observe = Math.round(total * 0.08)
-  const outcomes: Record<Outcome, number> = {
-    '병원 이송': hospital,
-    귀가: home,
-    관찰: observe,
-    '교실 복귀': Math.max(0, total - hospital - home - observe),
-  }
-  return {
-    date: key,
-    weekdayIdx: date.getDay(),
-    operating,
-    holiday,
-    total,
-    outcomes,
-    byCat,
-    topCat: topCatOf(byCat),
-    notable: notableOf(byCat, outcomes),
-    source: 'synth',
-  }
-}
-
-/** 이번 달 1일~오늘까지 일일 보고 배열. saved(마감본)·todayLive 우선, 없으면 합성. */
+/** 이번 달 1일~오늘까지 일일 보고 배열. 마감본(saved)·오늘(todayLive) 우선,
+ *  나머지 과거일은 실제 방문 기록으로 계산(합성/임의 생성 금지 — 증빙 자료). */
 export function monthReports(
   now: Date,
   saved: Record<string, DailyReport>,
-  todayLive?: DailyReport,
+  todayLive: DailyReport | undefined,
+  visits: Visit[],
 ): DailyReport[] {
   const y = now.getFullYear()
   const m = now.getMonth()
@@ -135,7 +87,7 @@ export function monthReports(
     const key = dateKey(date)
     if (saved[key]) out.push(saved[key])
     else if (key === todayKey && todayLive) out.push(todayLive)
-    else out.push(synthDailyReport(date))
+    else out.push(reportFromVisits(date, visits)) // 실제 방문만
   }
   return out
 }
