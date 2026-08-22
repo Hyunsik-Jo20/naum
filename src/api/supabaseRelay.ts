@@ -17,6 +17,12 @@ import type { ClassPayload } from '../data/station'
 export type { ClassPayload }
 export interface RelayEvent { studentToken: string; enc: Enc; ts: number }
 
+// 채널 토픽은 구독마다 고유해야 한다. 고정 이름을 재사용하면(StrictMode 재마운트·이전
+// removeChannel 완료 전 재구독) Supabase가 이미 subscribe된 동일 토픽 채널을 돌려주고,
+// 거기에 .on()을 다시 붙여 "cannot add postgres_changes callbacks after subscribe()" 에러가 난다.
+let chanSeq = 0
+const uniqTopic = (base: string) => `${base}#${chanSeq++}`
+
 // ── 발신(스테이션/키오스크 측) ──
 /** 반 채널로 한 이벤트 발신(암호화). */
 export async function emitClass(grade: number, classNo: number, studentId: string, payload: ClassPayload, ts: number) {
@@ -119,7 +125,7 @@ export async function subscribeClass(grade: number, classNo: number, onChange: (
   const classToken = await schoolClassToken(grade, classNo)
   let subscribedOnce = false
   const ch = sb
-    .channel(`relay-class-${classToken}`)
+    .channel(uniqTopic(`relay-class-${classToken}`))
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'relay_class_inbox', filter: `class_token=eq.${classToken}` }, onChange)
     .subscribe((status) => {
       // 재연결(SUBSCRIBED 재도달) 시 끊긴 사이 놓친 이벤트를 catch-up 재조회.
@@ -138,7 +144,7 @@ export async function subscribeStudent(studentId: string, onChange: () => void):
   const studentToken = await schoolStudentToken(studentId)
   let subscribedOnce = false
   const ch = sb
-    .channel(`relay-student-${studentToken}`)
+    .channel(uniqTopic(`relay-student-${studentToken}`))
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'relay_student_inbox', filter: `student_token=eq.${studentToken}` }, onChange)
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
@@ -207,7 +213,7 @@ export async function subscribeNurse(onChange: () => void): Promise<() => void> 
   const sb = supabase!
   let once = false
   const ch = sb
-    .channel('relay-nurse-inbox')
+    .channel(uniqTopic('relay-nurse-inbox'))
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'relay_nurse_inbox' }, onChange)
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') { if (once) onChange(); once = true }
