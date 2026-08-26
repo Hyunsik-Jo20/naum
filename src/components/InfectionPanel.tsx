@@ -1,6 +1,7 @@
+// 이상 신호 · 감염병 모니터링 — 실데이터(주간 stats + 90일 rows) 기반 조기탐지.
+//  판정 로직(surveillance)은 그대로, 입력만 실측: cat=최근 7일, base=직전 28일 운영일 평균.
 import { useMemo, useState } from 'react'
-import type { EduSchool } from '../data/eduMock'
-import { buildMonthly } from '../data/monthly'
+import { buildMonthlyReal, type EduSchoolStats, type EduVisitRow } from '../data/eduLive'
 import {
   INF_CAT,
   regionSignals,
@@ -24,7 +25,13 @@ function fmtX(x: number): string {
   return `${x.toFixed(1)}×`
 }
 
-export default function InfectionPanel({ schools }: { schools: EduSchool[] }) {
+export default function InfectionPanel({
+  schools,
+  rows,
+}: {
+  schools: EduSchoolStats[] // 주간 실측 통계(등록부+cat/base)
+  rows: EduVisitRow[] // 해당 학교들의 최근 90일 방문(비식별)
+}) {
   const { openCompose, thresholds, setThreshold } = useNotices()
   const [showCfg, setShowCfg] = useState(false)
   const [selDay, setSelDay] = useState<number | null>(null)
@@ -36,7 +43,7 @@ export default function InfectionPanel({ schools }: { schools: EduSchool[] }) {
     regionMinCount: thresholds.inf_region_min,
   }
 
-  const monthly = useMemo(() => buildMonthly(schools), [schools])
+  const monthly = useMemo(() => buildMonthlyReal(rows), [rows])
 
   // 증후군별 조기신호(평소 대비 증가배수) — 확진 전에 증상 단위로 본다.
   const syndromes = useMemo(() => syndromeSignals(schools, params), [schools, params])
@@ -54,25 +61,48 @@ export default function InfectionPanel({ schools }: { schools: EduSchool[] }) {
   const alertRegions = regions.filter((r) => r.level !== 'normal')
   const alertSchools = schoolSigs.filter((x) => x.level !== 'normal')
 
-  // 감염병 계통 월간 추이
+  // 감염병 계통 월간 추이(실측). 전월/전년은 데이터 있을 때만 표시.
   const curLine = monthly.cur.map((d) => d[INF_CAT])
   const prevLine = monthly.prev.map((d) => d[INF_CAT])
   const lyLine = monthly.lastYear.map((d) => d[INF_CAT])
+  const hasPrev = prevLine.some((v) => v > 0)
+  const hasLy = lyLine.some((v) => v > 0)
+  const trendLines = [
+    { name: '이번 달', color: '#a32d2d', values: curLine },
+    ...(hasPrev ? [{ name: '전월', color: '#888780', values: prevLine, dashed: true }] : []),
+    ...(hasLy ? [{ name: '전년 동월', color: '#0f6e56', values: lyLine, dashed: true }] : []),
+  ]
 
-  // 선택 날짜 → 표시 건수 배분 계수 (증가배수/경보는 주간 기준이라 영향 없음)
-  const mult = selDay != null ? (monthly.curFactors[selDay] ?? 0) / 5 : 1
+  // 선택 날짜 → 그날의 실제 감염병 방문(과거엔 배분 계수였음 — 이제 실측)
+  const regionOf = useMemo(() => new Map(schools.map((s) => [s.id, s.region])), [schools])
+  const dayInf = useMemo(() => {
+    if (selDay == null) return null
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = now.getMonth()
+    const d = selDay + 1
+    return rows.filter((r) => {
+      if (r.catIdx !== INF_CAT) return false
+      const dt = new Date(r.createdAt)
+      return dt.getFullYear() === y && dt.getMonth() === m && dt.getDate() === d
+    })
+  }, [rows, selDay])
   const dayLabel = selDay != null ? `${monthly.labels[selDay]}일` : '주간'
-  const dayCount = (weekly: number) => Math.round(weekly * mult)
+  const dayCountRegion = (region: string) =>
+    dayInf ? dayInf.filter((r) => regionOf.get(r.schoolId) === region).length : 0
+  const dayCountSchool = (id: string) => (dayInf ? dayInf.filter((r) => r.schoolId === id).length : 0)
+  const showRegion = (weekly: number, region: string) => (dayInf ? dayCountRegion(region) : weekly)
+  const showSchool = (weekly: number, id: string) => (dayInf ? dayCountSchool(id) : weekly)
 
-  const weekTotal = schoolSigs.reduce((a, x) => a + dayCount(x.count), 0)
-  const regionMax = Math.max(1, ...regions.map((r) => r.count))
+  const weekTotal = dayInf ? dayInf.length : schoolSigs.reduce((a, x) => a + x.count, 0)
+  const regionMax = Math.max(1, ...regions.map((r) => showRegion(r.count, r.region)))
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <div className="row between" style={{ marginBottom: 10 }}>
         <div className="sec-label">
           <i className="ti ti-alert-triangle" style={{ verticalAlign: -2 }} aria-hidden="true" /> 이상 신호 · 감염병 모니터링{' '}
-          <span className="muted-inline">· 평소(baseline) 대비 급증 조기탐지</span>
+          <span className="muted-inline">· 평소(baseline) 대비 급증 조기탐지 · 실제 접수 기준</span>
         </div>
         <button className="btn ghost small" onClick={() => setShowCfg((v) => !v)}>
           <i className="ti ti-settings" aria-hidden="true" /> 임계치
@@ -200,7 +230,7 @@ export default function InfectionPanel({ schools }: { schools: EduSchool[] }) {
       )}
 
       {/* 학교 경보 */}
-      <div className="sub-label">학교 경보 <span className="muted-inline">· 평소 대비 급증 + 율(재학생 1000명당)</span></div>
+      <div className="sub-label">학교 경보 <span className="muted-inline">· 평소 대비 급증{schools.some((s) => s.enroll) ? ' + 율(재학생 1000명당)' : ''}</span></div>
       {alertSchools.length === 0 ? (
         <div className="dz-item ok" style={{ marginBottom: 14 }}>
           <i className="ti ti-circle-check" aria-hidden="true" />
@@ -217,7 +247,8 @@ export default function InfectionPanel({ schools }: { schools: EduSchool[] }) {
                   <span className="inf-tag" style={{ background: LEVEL_COLOR[x.level] }}>{LEVEL_LABEL[x.level]}</span>
                 </div>
                 <div className="alert-sub">
-                  감염병 {x.count}건 · 평소 {fmtX(x.excess)} · {x.rate.toFixed(1)}건/천명
+                  감염병 {x.count}건 · 평소 {fmtX(x.excess)}
+                  {x.rate > 0 ? ` · ${x.rate.toFixed(1)}건/천명` : ''}
                   {x.school.anomaly ? ` — ${x.school.anomaly}` : ''}
                 </div>
               </div>
@@ -262,7 +293,12 @@ export default function InfectionPanel({ schools }: { schools: EduSchool[] }) {
 
       {/* 감염병 추이 */}
       <div className="row between" style={{ flexWrap: 'wrap', gap: 8 }}>
-        <div className="sub-label">감염병 추이 <span className="muted-inline">· 이번 달/전월/전년 동월 · 날짜 클릭 시 건수 연동</span></div>
+        <div className="sub-label">
+          감염병 추이{' '}
+          <span className="muted-inline">
+            · 이번 달{hasPrev ? '/전월' : ''}{hasLy ? '/전년 동월' : ' · 전년 데이터 없음'} · 날짜 클릭 시 건수 연동
+          </span>
+        </div>
         {selDay != null && (
           <button className="btn ghost small" onClick={() => setSelDay(null)}>
             <i className="ti ti-x" aria-hidden="true" /> {dayLabel} 해제
@@ -271,11 +307,7 @@ export default function InfectionPanel({ schools }: { schools: EduSchool[] }) {
       </div>
       <TrendChart
         labels={monthly.labels}
-        lines={[
-          { name: '이번 달', color: '#a32d2d', values: curLine },
-          { name: '전월', color: '#888780', values: prevLine, dashed: true },
-          { name: '전년 동월', color: '#0f6e56', values: lyLine, dashed: true },
-        ]}
+        lines={trendLines}
         selected={selDay}
         onSelect={(i) => setSelDay((prev) => (prev === i ? null : i))}
       />
@@ -292,11 +324,11 @@ export default function InfectionPanel({ schools }: { schools: EduSchool[] }) {
               <span className="bar-track">
                 <span
                   className="bar-fill"
-                  style={{ width: `${(dayCount(r.count) / regionMax) * 100}%`, background: LEVEL_COLOR[r.level] }}
+                  style={{ width: `${(showRegion(r.count, r.region) / regionMax) * 100}%`, background: LEVEL_COLOR[r.level] }}
                 />
               </span>
               <span className="bar-val">
-                {dayCount(r.count)}
+                {showRegion(r.count, r.region)}
                 {r.level !== 'normal' && <span className="muted-inline"> · {fmtX(r.excess)}</span>}
               </span>
             </div>
@@ -319,7 +351,7 @@ export default function InfectionPanel({ schools }: { schools: EduSchool[] }) {
                 )}
               </span>
               <span className="inf-count">
-                {dayCount(x.count)}건 <span className="muted-inline">{fmtX(x.excess)}</span>
+                {showSchool(x.count, x.school.id)}건 <span className="muted-inline">{fmtX(x.excess)}</span>
               </span>
             </div>
           ))}

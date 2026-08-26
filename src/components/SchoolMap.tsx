@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { schoolTotal, type EduSchool } from '../data/eduMock'
+import type { EduSchoolStats } from '../data/eduLive'
 import type { SchoolLevel } from '../data/busanSchools'
 import { KAKAO_KEY as KEY, loadKakao } from '../data/kakaoLoader'
+
+// 주간(최근 7일) 총 방문 — 실데이터 stats.cat 합
+const schoolTotal = (s: EduSchoolStats) => s.cat.reduce((a, b) => a + b, 0)
 
 // 학교급별 색상
 const LEVEL_COLOR: Record<SchoolLevel, string> = {
@@ -47,8 +50,8 @@ export default function SchoolMap({
   onSelect,
   airAlert,
 }: {
-  schools: EduSchool[]
-  onSelect?: (s: EduSchool) => void
+  schools: EduSchoolStats[]
+  onSelect?: (s: EduSchoolStats) => void
   airAlert?: AirAlert | null
 }) {
   if (!KEY) {
@@ -68,8 +71,8 @@ function KakaoView({
   onSelect,
   airAlert,
 }: {
-  schools: EduSchool[]
-  onSelect?: (s: EduSchool) => void
+  schools: EduSchoolStats[]
+  onSelect?: (s: EduSchoolStats) => void
   airAlert?: AirAlert | null
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
@@ -126,7 +129,7 @@ function KakaoView({
       kakao.maps.event.addListener(marker, 'click', () => {
         const html =
           `<div style="padding:8px 10px;font-size:12px;line-height:1.5;min-width:130px">` +
-          `<b>${s.name}</b> <span style="color:#888">${s.level}·${s.region}</span><br/>총 ${schoolTotal(s)}건` +
+          `<b>${s.name}</b> <span style="color:#888">${s.level}·${s.region}</span><br/>주간 ${schoolTotal(s)}건` +
           (s.anomaly ? `<br/><span style="color:#a32d2d">⚠ ${s.anomaly}</span>` : '') +
           `</div>`
         infoRef.current.setContent(html)

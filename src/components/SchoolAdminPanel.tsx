@@ -67,7 +67,7 @@ export default function SchoolAdminPanel() {
       lat: String(s.lat),
       lon: String(s.lon),
       tel: s.tel ?? '',
-      enroll: String(s.enroll),
+      enroll: s.enroll != null ? String(s.enroll) : '',
       temp: s.temp ?? false,
     })
     setShowMap(false)
@@ -151,7 +151,7 @@ export default function SchoolAdminPanel() {
             </label>
             <label className="admin-f">
               재학생 수
-              <input value={form.enroll} onChange={(e) => setForm({ ...form, enroll: e.target.value })} placeholder="자동" inputMode="numeric" />
+              <input value={form.enroll} onChange={(e) => setForm({ ...form, enroll: e.target.value })} placeholder="선택 — 율(천명당) 지표용" inputMode="numeric" />
             </label>
           </div>
           <label className="admin-f">

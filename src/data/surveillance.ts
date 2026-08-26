@@ -1,7 +1,18 @@
 // 감염병 의심 조기탐지(syndromic surveillance).
 // 핵심: 확진 병명이 아니라 "증상 증후군의 시·공간 군집"을 평소(baseline) 대비로 탐지한다.
-// 신호 = ① 율(재학생 1000명당) ② 평소 대비 증가배수(excess) ③ 절대건수 게이트(노이즈 차단).
-import type { EduSchool } from './eduMock'
+// 신호 = ① 율(재학생 1000명당, enroll 있을 때만) ② 평소 대비 증가배수(excess) ③ 절대건수 게이트(노이즈 차단).
+// 입력은 실데이터 집계(eduLive.buildSchoolStats)의 EduSchoolStats — 로직은 데이터 출처와 무관한 순수 계산.
+
+/** 탐지 입력 형태 — 등록부 정보 + 주간 계통 집계(cat)·평소 기대치(base). */
+export interface SurvSchool {
+  id: string
+  name: string
+  region: string
+  cat: number[] // 주간 계통별 방문 수 (len 12)
+  base: number[] // 평소(baseline) 계통별 주간 기대치 (len 12)
+  enroll?: number // 재학생 수(선택) — 율 계산용
+  anomaly?: string
+}
 
 export const INF_CAT = 10 // 감염병 계통 인덱스
 
@@ -47,7 +58,7 @@ function classify(count: number, excess: number, minCount: number, p: SurvParams
 }
 
 export interface SchoolSignal {
-  school: EduSchool
+  school: SurvSchool
   count: number // 현재 건수
   base: number // 평소 기대치
   excess: number // 평소 대비 배수
@@ -56,11 +67,11 @@ export interface SchoolSignal {
 }
 
 /** 학교 단위 신호(기본: 감염병 계통). idx로 증후군별 적용 가능. */
-export function schoolSignal(s: EduSchool, p: SurvParams = DEFAULT_SURV, idx = INF_CAT): SchoolSignal {
+export function schoolSignal(s: SurvSchool, p: SurvParams = DEFAULT_SURV, idx = INF_CAT): SchoolSignal {
   const count = s.cat[idx]
   const base = s.base[idx]
   const excess = count / Math.max(base, EPS)
-  const rate = s.enroll > 0 ? (count / s.enroll) * 1000 : 0
+  const rate = s.enroll && s.enroll > 0 ? (count / s.enroll) * 1000 : 0
   return { school: s, count, base, excess, rate, level: classify(count, excess, p.minCount, p) }
 }
 
@@ -74,7 +85,7 @@ export interface RegionSignal {
 }
 
 /** 지역 단위 신호 — 같은 구 학교들의 평소 대비 동시 상승(공간 군집)을 본다. */
-export function regionSignals(schools: EduSchool[], p: SurvParams = DEFAULT_SURV, idx = INF_CAT): RegionSignal[] {
+export function regionSignals(schools: SurvSchool[], p: SurvParams = DEFAULT_SURV, idx = INF_CAT): RegionSignal[] {
   const m: Record<string, { count: number; base: number; schools: number }> = {}
   schools.forEach((s) => {
     const r = (m[s.region] ??= { count: 0, base: 0, schools: 0 })
@@ -106,7 +117,7 @@ export interface SyndromeSignal extends Syndrome {
 }
 
 /** 증후군별 신호 — 발열호흡기/위장관/발진/결막염/감염병을 평소 대비로 따로 추적. */
-export function syndromeSignals(schools: EduSchool[], p: SurvParams = DEFAULT_SURV): SyndromeSignal[] {
+export function syndromeSignals(schools: SurvSchool[], p: SurvParams = DEFAULT_SURV): SyndromeSignal[] {
   return SYNDROMES.map((sy) => {
     let count = 0
     let base = 0

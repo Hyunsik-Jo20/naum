@@ -1,21 +1,23 @@
+// 학교 상세 드릴다운 — 해당 학교의 실제 방문(rows)으로 월간 추이·계통 분포 계산.
 import { useMemo, useState } from 'react'
 import { DISEASE_CATEGORIES } from '../data/mock'
-import { buildMonthly } from '../data/monthly'
-import type { EduSchool } from '../data/eduMock'
+import { buildMonthlyReal, type EduSchoolStats, type EduVisitRow } from '../data/eduLive'
 import TrendChart from './TrendChart'
 import WeatherBar from './WeatherBar'
 
 export default function SchoolDetail({
   school,
+  rows,
   onClose,
 }: {
-  school: EduSchool
+  school: EduSchoolStats
+  rows: EduVisitRow[] // 이 학교의 최근 90일 방문(비식별)
   onClose: () => void
 }) {
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
-  const monthly = useMemo(() => buildMonthly([school]), [school])
+  const monthly = useMemo(() => buildMonthlyReal(rows), [rows])
 
-  // 이번 달 누계 계통 분포
+  // 이번 달 누계 계통 분포(실측)
   const monthCat = monthly.cur.reduce(
     (acc, day) => acc.map((v, i) => v + day[i]),
     new Array(12).fill(0) as number[],
@@ -32,8 +34,16 @@ export default function SchoolDetail({
   const curLine = monthly.cur.map(sum)
   const prevLine = monthly.prev.map(sum)
   const lyLine = monthly.lastYear.map(sum)
-  const moM = sum(prevLine) ? Math.round((sum(curLine) / sum(prevLine) - 1) * 100) : 0
-  const yoY = sum(lyLine) ? Math.round((sum(curLine) / sum(lyLine) - 1) * 100) : 0
+  const hasPrev = sum(prevLine) > 0
+  const hasLy = sum(lyLine) > 0
+  const moM = hasPrev ? Math.round((sum(curLine) / sum(prevLine) - 1) * 100) : null
+  const yoY = hasLy ? Math.round((sum(curLine) / sum(lyLine) - 1) * 100) : null
+
+  const lines = [
+    { name: '이번 달', color: '#185fa5', values: curLine },
+    ...(hasPrev ? [{ name: '전월', color: '#888780', values: prevLine, dashed: true }] : []),
+    ...(hasLy ? [{ name: '전년 동월', color: '#0f6e56', values: lyLine, dashed: true }] : []),
+  ]
 
   return (
     <div className="card school-detail" style={{ marginBottom: 16 }}>
@@ -45,7 +55,7 @@ export default function SchoolDetail({
               · {school.region} · {school.level}
             </span>
           </div>
-          <div className="muted" style={{ fontSize: 12 }}>학교 상세 (이번 달 기준)</div>
+          <div className="muted" style={{ fontSize: 12 }}>학교 상세 (이번 달 · 실제 접수 기준)</div>
         </div>
         <button className="x" onClick={onClose} aria-label="닫기">
           <i className="ti ti-x" aria-hidden="true" />
@@ -75,28 +85,33 @@ export default function SchoolDetail({
           <div className="kpi-label">최다 계통</div>
           <div className="kpi-val sm">{topCat}</div>
         </div>
-        <div className={`kpi ${moM >= 0 ? 'warn' : ''}`}>
+        <div className={`kpi ${moM != null && moM >= 0 ? 'warn' : ''}`}>
           <div className="kpi-label">전월 대비</div>
-          <div className="kpi-val">{moM >= 0 ? '+' : ''}{moM}%</div>
+          <div className="kpi-val">{moM == null ? '—' : `${moM >= 0 ? '+' : ''}${moM}%`}</div>
         </div>
         <div className="kpi">
           <div className="kpi-label">전년 동월 대비</div>
-          <div className="kpi-val">{yoY >= 0 ? '+' : ''}{yoY}%</div>
+          <div className="kpi-val">{yoY == null ? '—' : `${yoY >= 0 ? '+' : ''}${yoY}%`}</div>
         </div>
       </div>
 
       {/* 방문 추이 */}
-      <div className="sec-label" style={{ marginBottom: 6 }}>방문 추이 <span className="muted-inline">· 이번 달/전월/전년 동월</span></div>
-      <TrendChart
-        labels={monthly.labels}
-        lines={[
-          { name: '이번 달', color: '#185fa5', values: curLine },
-          { name: '전월', color: '#888780', values: prevLine, dashed: true },
-          { name: '전년 동월', color: '#0f6e56', values: lyLine, dashed: true },
-        ]}
-        selected={selectedDay}
-        onSelect={(i) => setSelectedDay((prev) => (prev === i ? null : i))}
-      />
+      <div className="sec-label" style={{ marginBottom: 6 }}>
+        방문 추이{' '}
+        <span className="muted-inline">
+          · 이번 달{hasPrev ? '/전월' : ''}{hasLy ? '/전년 동월' : ''}{!hasLy ? ' · 전년 데이터 없음' : ''}
+        </span>
+      </div>
+      {total === 0 && !hasPrev ? (
+        <div className="col-empty">접수 데이터가 없어요.</div>
+      ) : (
+        <TrendChart
+          labels={monthly.labels}
+          lines={lines}
+          selected={selectedDay}
+          onSelect={(i) => setSelectedDay((prev) => (prev === i ? null : i))}
+        />
+      )}
 
       {/* 계통 분포 */}
       <div className="sec-label" style={{ margin: '12px 0 10px' }}>병명 계통별 분포</div>

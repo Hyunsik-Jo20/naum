@@ -1,16 +1,13 @@
+// 학교급·학년/남녀별 방문 — 실제 방문(rows)의 학년·성별 집계(eduLive.buildGradeSex).
+//  (구 버전은 총량을 노이즈 비율로 배분한 데모 — 제거.)
 import { useState } from 'react'
-import type { EduSchool } from '../data/eduMock'
+import type { GradeSexAgg } from '../data/eduLive'
 
-const LEVELS: { key: '초' | '중' | '고'; code: number; grades: number[]; color: string }[] = [
-  { key: '초', code: 1, grades: [1, 2, 3, 4, 5, 6], color: '#185fa5' },
-  { key: '중', code: 2, grades: [1, 2, 3], color: '#1d9e75' },
-  { key: '고', code: 3, grades: [1, 2, 3], color: '#534ab7' },
+const LEVELS: { key: '초' | '중' | '고'; grades: number[]; color: string }[] = [
+  { key: '초', grades: [1, 2, 3, 4, 5, 6], color: '#185fa5' },
+  { key: '중', grades: [1, 2, 3], color: '#1d9e75' },
+  { key: '고', grades: [1, 2, 3], color: '#534ab7' },
 ]
-
-const noise = (a: number) => {
-  const x = Math.sin(a) * 43758.5453
-  return x - Math.floor(x)
-}
 
 interface Item { label: string; value: number; color: string }
 
@@ -36,37 +33,24 @@ function VBars({ items }: { items: Item[] }) {
 }
 
 export default function GradeSexChart({
-  schools,
-  catIdx,
-  total,
+  agg,
   categoryLabel,
 }: {
-  schools: EduSchool[]
-  catIdx: number
-  total: number // 현재 범위(기간·선택일·계통)의 총 방문 — 방문 추이와 동일 집계
+  agg: Record<'초' | '중' | '고', GradeSexAgg> // 현재 범위(기간·선택일·계통) 실측 집계
   categoryLabel: string
 }) {
   const [mode, setMode] = useState<'학년' | '남녀'>('학년')
+  const grand = LEVELS.reduce((a, lv) => a + agg[lv.key].total, 0)
 
-  // 학교급별 주간 비중(분포 형태) → 현재 총 방문(total)을 비중대로 배분 (추이와 연동)
-  const weeklyBase = (lv: string) =>
-    schools
-      .filter((s) => s.level === lv)
-      .reduce((a, s) => a + (catIdx < 0 ? s.cat.reduce((x, y) => x + y, 0) : s.cat[catIdx]), 0)
-  const sumBase = LEVELS.reduce((a, lv) => a + weeklyBase(lv.key), 0) || 1
-
-  function itemsFor(lv: { key: string; code: number; grades: number[]; color: string }): Item[] {
-    const base = Math.round((total * weeklyBase(lv.key)) / sumBase)
+  function itemsFor(lv: { key: '초' | '중' | '고'; grades: number[]; color: string }): Item[] {
+    const g = agg[lv.key]
     if (mode === '남녀') {
-      const nam = Math.round(base * (0.5 + 0.05 * (noise(lv.code) - 0.5) * 2))
       return [
-        { label: '남', value: nam, color: '#185fa5' },
-        { label: '여', value: Math.max(0, base - nam), color: '#d4537e' },
+        { label: '남', value: g.bySex.남, color: '#185fa5' },
+        { label: '여', value: g.bySex.여, color: '#d4537e' },
       ]
     }
-    const w = lv.grades.map((g) => 0.8 + 0.4 * noise(lv.code * 31 + g * 7))
-    const sumW = w.reduce((a, b) => a + b, 0)
-    return lv.grades.map((g, i) => ({ label: `${g}`, value: Math.round((base * w[i]) / sumW), color: lv.color }))
+    return lv.grades.map((gr) => ({ label: `${gr}`, value: g.byGrade[gr] ?? 0, color: lv.color }))
   }
 
   return (
@@ -83,16 +67,20 @@ export default function GradeSexChart({
           ))}
         </div>
       </div>
-      <div className="gs-grid">
-        {LEVELS.map((lv) => (
-          <div key={lv.key} className="gs-block">
-            <div className="gs-title" style={{ color: lv.color }}>
-              {lv.key === '초' ? '초등학교' : lv.key === '중' ? '중학교' : '고등학교'}
+      {grand === 0 ? (
+        <div className="col-empty">현재 범위에 접수 데이터가 없어요.</div>
+      ) : (
+        <div className="gs-grid">
+          {LEVELS.map((lv) => (
+            <div key={lv.key} className="gs-block">
+              <div className="gs-title" style={{ color: lv.color }}>
+                {lv.key === '초' ? '초등학교' : lv.key === '중' ? '중학교' : '고등학교'}
+              </div>
+              <VBars items={itemsFor(lv)} />
             </div>
-            <VBars items={itemsFor(lv)} />
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

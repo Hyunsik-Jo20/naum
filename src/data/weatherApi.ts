@@ -2,7 +2,7 @@
 //  - 기본: Open-Meteo (API 키 불필요)
 //  - VITE_WEATHER_SOURCE=kma 이면 기상청 동네예보(좌표→5km 격자) + 에어코리아 미세먼지
 //    (개발 프록시 /api/kma, /api/air 경유. 실패 시 Open-Meteo 폴백)
-import { DOW, makeDay, type WeatherDay } from './weather'
+import { DOW, type WeatherDay } from './weather'
 import { dfsXyConv } from './kmaGrid'
 import { wgs84ToTM } from './tm'
 import { SCHOOL } from './location'
@@ -129,7 +129,7 @@ export async function fetchCurrent(
   return fetchCurrentOpenMeteo(lat, lon)
 }
 
-/** 최근 14일 일별 기상 + 미세먼지 → WeatherDay[] (방문 수는 모형 적용). 과거는 Open-Meteo. */
+/** 최근 14일 일별 기상 + 미세먼지 → WeatherDay[] (순수 실측 기상 — 방문 수는 eduLive에서 조인). 과거는 Open-Meteo. */
 export async function fetchHistory(
   lat: number = SCHOOL.lat,
   lon: number = SCHOOL.lon,
@@ -158,6 +158,15 @@ export async function fetchHistory(
     const pm25 = r1(avg(p25[day] ?? []))
     const humidity = rainMm > 0 ? 82 : 52
     const d = new Date(day)
-    return makeDay(`${d.getMonth() + 1}/${d.getDate()}`, DOW[d.getDay()], tempC, humidity, pm10, pm25, rainMm)
+    return {
+      key: day, // YYYY-MM-DD — 실측 방문(eduLive.dailyCatMap) 조인 키
+      date: `${d.getMonth() + 1}/${d.getDate()}`,
+      dow: DOW[d.getDay()],
+      tempC,
+      humidity,
+      pm10,
+      pm25,
+      rainMm,
+    }
   })
 }

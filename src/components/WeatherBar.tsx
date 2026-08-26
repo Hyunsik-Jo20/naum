@@ -5,7 +5,6 @@ import {
   pm25Grade,
   rainClass,
   tempBand,
-  today,
   type Band,
 } from '../data/weather'
 import { fetchCurrent, type CurrentWeather } from '../data/weatherApi'
@@ -16,13 +15,8 @@ function Badge({ band }: { band: Band }) {
   return <span className={`wx-badge ${band.tone}`}>{band.label}</span>
 }
 
-const DEMO: CurrentWeather = {
-  tempC: today.tempC,
-  humidity: today.humidity,
-  pm10: today.pm10,
-  pm25: today.pm25,
-  rainMm: today.rainMm,
-}
+// 실측 API 실패 시 표시용 중립값(합성 시계열 제거 — 값은 곧 실측으로 대체됨)
+const DEMO: CurrentWeather = { tempC: 20, humidity: 55, pm10: 30, pm25: 15, rainMm: 0 }
 
 export default function WeatherBar({
   lat,
