@@ -13,15 +13,11 @@ import {
   type Enc,
 } from '../data/schoolCrypto'
 import type { ClassPayload } from '../data/station'
+import { uniqTopic, onWake } from '../data/realtimeUtil'
+import { schoolId } from '../data/school'
 
 export type { ClassPayload }
 export interface RelayEvent { studentToken: string; enc: Enc; ts: number }
-
-// 채널 토픽은 구독마다 고유해야 한다. 고정 이름을 재사용하면(StrictMode 재마운트·이전
-// removeChannel 완료 전 재구독) Supabase가 이미 subscribe된 동일 토픽 채널을 돌려주고,
-// 거기에 .on()을 다시 붙여 "cannot add postgres_changes callbacks after subscribe()" 에러가 난다.
-let chanSeq = 0
-const uniqTopic = (base: string) => `${base}#${chanSeq++}`
 
 // ── 발신(스테이션/키오스크 측) ──
 /** 반 채널로 한 이벤트 발신(암호화). */
@@ -61,22 +57,6 @@ function dedupe(evs: DecEvent[]): DecEvent[] {
     out.push(e)
   }
   return out
-}
-
-/** 소켓이 조용히 멈춘 경우(절전·네트워크 전환)까지 대비해, 온라인 복귀·탭 활성화 시 재조회 트리거. */
-function onWake(cb: () => void): () => void {
-  if (typeof window === 'undefined') return () => {}
-  const wake = () => {
-    const online = typeof navigator === 'undefined' || navigator.onLine
-    const visible = typeof document === 'undefined' || document.visibilityState === 'visible'
-    if (online && visible) cb()
-  }
-  window.addEventListener('online', wake)
-  document.addEventListener('visibilitychange', wake)
-  return () => {
-    window.removeEventListener('online', wake)
-    document.removeEventListener('visibilitychange', wake)
-  }
 }
 
 /** 담임: 우리 반 채널 수신 + 반 키로 복호화. */
@@ -168,14 +148,14 @@ export interface NurseRequest {
   sex?: '남' | '여' // 전학안내: 성별(선택)
 }
 
-/** 교사 발신 — 반 키로 암호화해 relay_nurse_inbox에 적재. */
+/** 교사 발신 — 반 키로 암호화해 relay_nurse_inbox에 적재. school_id로 수신 스코프(0012 RLS). */
 export async function emitNurseRequest(req: NurseRequest, ts: number) {
   const sb = supabase!
   const [classToken, enc] = await Promise.all([
     schoolClassToken(req.grade, req.classNo),
     schoolClassKey(req.grade, req.classNo).then((k) => encryptJson(k, req)),
   ])
-  const { error } = await sb.from('relay_nurse_inbox').insert({ class_token: classToken, enc, ts })
+  const { error } = await sb.from('relay_nurse_inbox').insert({ class_token: classToken, enc, ts, school_id: schoolId() })
   if (error) throw new Error(`emitNurseRequest: ${error.message}`)
 }
 
@@ -191,7 +171,11 @@ export async function loadNurseRequests(classes: { grade: number; classNo: numbe
       map.set(tok, key)
     }),
   )
-  const { data, error } = await sb.from('relay_nurse_inbox').select('id, class_token, enc, ts').order('ts', { ascending: false })
+  const { data, error } = await sb
+    .from('relay_nurse_inbox')
+    .select('id, class_token, enc, ts')
+    .eq('school_id', schoolId())
+    .order('ts', { ascending: false })
   if (error || !data) return []
   return Promise.all(
     (data as { id: number; class_token: string; enc: Enc; ts: number }[]).map(async (r) => {
@@ -214,7 +198,7 @@ export async function subscribeNurse(onChange: () => void): Promise<() => void> 
   let once = false
   const ch = sb
     .channel(uniqTopic('relay-nurse-inbox'))
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'relay_nurse_inbox' }, onChange)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'relay_nurse_inbox', filter: `school_id=eq.${schoolId()}` }, onChange)
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') { if (once) onChange(); once = true }
     })

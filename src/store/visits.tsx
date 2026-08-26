@@ -18,6 +18,7 @@ import * as offline from '../data/offline'
 import { tileById } from '../data/mock'
 import { loadNotifyTargets } from '../data/notifyTargets'
 import { emitParent } from '../data/parentNotify'
+import { schoolId } from '../data/school'
 
 /**
  * 로컬/서버 분리 — 세 가지 모드로 동작(우선순위 supabase > backend > local):
@@ -320,7 +321,9 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
         return sid ? findStudent(sid) : undefined
       },
       addVisit: (student, symptomTileIds) => {
-        const id = `v-${WIN}-${++counter}`
+        // id에 학교+시각(36진수)을 포함 — 멀티테넌트에서 타 학교와 id 충돌 시
+        //  createVisit이 중복키(23505)를 멱등 성공으로 간주해 방문이 조용히 유실되는 것을 방지.
+        const id = `v-${schoolId()}-${WIN}-${Date.now().toString(36)}-${++counter}`
         const v: Visit = {
           id,
           grade: student.grade,
@@ -337,7 +340,7 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
         if (modeRef.current === 'supabase') {
           // 온라인이면 즉시, 오프라인이면 큐에 쌓아 재연결 시 업로드.
           const sym = symptomTileIds.map((tid) => tileById(tid)?.label).filter(Boolean).join(' · ')
-          offline.run({ type: 'createVisit', visit: v, studentId: student.id })
+          offline.run({ type: 'createVisit', visit: v, studentId: student.id, schoolId: schoolId() })
           // 알림 대상 설정(담임/학부모)에 따라 발송
           const nt = loadNotifyTargets()
           if (nt.teacher) offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: { kind: '접수', sym, number: student.number }, ts: v.createdAt })

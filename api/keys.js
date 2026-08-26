@@ -25,20 +25,28 @@ function verifyLoginToken(token, secret) {
   return body
 }
 
-async function isNurse(req, SB_URL, SERVICE, ANON) {
+// 학교 id 형식(token.js와 동일 규칙)
+const SCH_RE = /^[a-z0-9_-]{1,32}$/i
+
+/** 호출자가 보건교사면 { sch }(자기 학교) 반환, 아니면 null.
+ *  edu는 제외 — 교육청은 비식별 집계만 보므로 복호 키가 필요 없다(최소권한).
+ *  멀티테넌트: 키는 항상 호출자의 학교로만 파생되므로 타 학교 키 획득 불가. */
+async function callerNurseSchool(req, SB_URL, SERVICE, ANON) {
   const auth = req.headers.authorization || req.headers.Authorization || ''
   const m = /^Bearer (.+)$/.exec(auth)
-  if (!m) return false
+  if (!m) return null
   try {
     const ur = await fetch(`${SB_URL}/auth/v1/user`, { headers: { apikey: ANON || SERVICE, Authorization: `Bearer ${m[1]}` } })
-    if (!ur.ok) return false
+    if (!ur.ok) return null
     const user = await ur.json()
-    if (!user?.id) return false
-    const pr = await fetch(`${SB_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=role`, { headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` } })
-    if (!pr.ok) return false
+    if (!user?.id) return null
+    const pr = await fetch(`${SB_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=role,school_id`, { headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` } })
+    if (!pr.ok) return null
     const rows = await pr.json()
-    return Array.isArray(rows) && (rows[0]?.role === 'nurse' || rows[0]?.role === 'edu')
-  } catch { return false }
+    const row = Array.isArray(rows) ? rows[0] : null
+    if (!row || row.role !== 'nurse') return null
+    return { sch: SCH_RE.test(String(row.school_id || '')) ? String(row.school_id) : 'demo' }
+  } catch { return null }
 }
 
 async function readBody(req) {
@@ -77,22 +85,27 @@ export default async function handler(req, res) {
   if (!MASTER || !SB_URL || !SERVICE) return res.status(501).json({ error: 'not_configured' })
 
   const body = await readBody(req)
-  const nurse = await isNurse(req, SB_URL, SERVICE, ANON)
+  const nurseP = await callerNurseSchool(req, SB_URL, SERVICE, ANON)
+  const nurse = !!nurseP
   const tok = !nurse && body.token && TOKEN_SECRET ? verifyLoginToken(body.token, TOKEN_SECRET) : null
+  // 키 스코프 학교 — 보건교사=자기 학교, 교사/학부모=토큰의 sch(서버 서명이라 신뢰). 구토큰은 demo.
+  const sch = nurseP?.sch ?? (SCH_RE.test(String(tok?.sch || '')) ? String(tok.sch) : 'demo')
+  // 파생 입력에 학교 프리픽스 — 학교마다 다른 키 공간(클라이언트 프로토콜·응답 형태는 불변).
+  const scoped = (ns) => `${sch}|${ns}`
 
   try {
     if (body.action === 'key') {
       const ns = String(body.ns || '')
       const ent = entitled(ns, nurse, tok)
       if (!ent) return res.status(403).json({ error: 'not_entitled' })
-      return res.status(200).json({ key: keyB64(MASTER, ns), token: ent.hasToken ? tokenHex(MASTER, ns) : undefined })
+      return res.status(200).json({ key: keyB64(MASTER, scoped(ns)), token: ent.hasToken ? tokenHex(MASTER, scoped(ns)) : undefined })
     }
     if (body.action === 'studentTokens') {
       // 라우팅 토큰(복호 불가)만 — 보건교사 또는 유효 교사 토큰이면 허용.
       if (!nurse && tok?.r !== 't') return res.status(403).json({ error: 'not_entitled' })
       const sids = Array.isArray(body.sids) ? body.sids.slice(0, 500) : []
       const tokens = {}
-      for (const sid of sids) tokens[String(sid)] = tokenHex(MASTER, `student:${sid}`)
+      for (const sid of sids) tokens[String(sid)] = tokenHex(MASTER, scoped(`student:${sid}`))
       return res.status(200).json({ tokens })
     }
     return res.status(400).json({ error: 'unknown_action' })

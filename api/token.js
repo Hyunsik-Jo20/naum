@@ -39,7 +39,7 @@ function verifyToken(token, secret) {
   return body
 }
 
-/** Authorization: Bearer <supabase jwt> → { role, org } (profiles 권위값, service-role 조회). */
+/** Authorization: Bearer <supabase jwt> → { role, org, school_id } (profiles 권위값, service-role 조회). */
 async function callerProfile(req, SB_URL, SERVICE, ANON) {
   const auth = req.headers.authorization || req.headers.Authorization || ''
   const m = /^Bearer (.+)$/.exec(auth)
@@ -52,7 +52,7 @@ async function callerProfile(req, SB_URL, SERVICE, ANON) {
     const user = await ur.json()
     if (!user || !user.id) return null
     const pr = await fetch(
-      `${SB_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=role,org`,
+      `${SB_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=role,org,school_id`,
       { headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` } },
     )
     if (!pr.ok) return null
@@ -73,10 +73,15 @@ async function readBody(req) {
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') } catch { return {} }
 }
 
-// 발급 payload 화이트리스트(불필요 필드 주입 방지)
-function sanitizeLogin(p) {
-  if (p.r === 't') return { r: 't', g: Number(p.g), c: Number(p.c) }
-  if (p.r === 'p') return { r: 'p', sid: String(p.sid || ''), n: String(p.n || '') }
+// 학교 id 형식(busanSchools 'b###' 또는 'demo' 등 안전한 슬러그만)
+const SCH_RE = /^[a-z0-9_-]{1,32}$/i
+
+// 발급 payload 화이트리스트(불필요 필드 주입 방지) + 학교 스탬프.
+//  sch는 발급자(보건교사)의 profiles.school_id — 서버가 찍으므로 클라이언트 위조 불가(멀티테넌트 격리).
+function sanitizeLogin(p, sch) {
+  const s = SCH_RE.test(String(sch || '')) ? String(sch) : 'demo'
+  if (p.r === 't') return { r: 't', g: Number(p.g), c: Number(p.c), sch: s }
+  if (p.r === 'p') return { r: 'p', sid: String(p.sid || ''), n: String(p.n || ''), sch: s }
   return null
 }
 
@@ -101,7 +106,7 @@ export default async function handler(req, res) {
       if (payload.r === 't' || payload.r === 'p') {
         const prof = await callerProfile(req, SB_URL, SERVICE, ANON)
         if (!prof || prof.role !== 'nurse') return res.status(403).json({ error: 'nurse_required' })
-        const clean = sanitizeLogin(payload)
+        const clean = sanitizeLogin(payload, prof.school_id)
         if (!clean) return res.status(400).json({ error: 'bad_payload' })
         return res.status(200).json({ token: signToken(clean, SECRET, 30 * 24 * 3600 * 1000) })
       }
@@ -113,9 +118,11 @@ export default async function handler(req, res) {
           (prof && prof.role === 'edu') ||
           (EDU_SECRET && secretHdr && secretHdr === EDU_SECRET)
         if (!eduOk) return res.status(403).json({ error: 'edu_required' })
+        // sch = 교육청이 명부에서 지정한 학교 id(테넌트). 미지정/비정상은 demo.
+        const sch = SCH_RE.test(String(payload.sch || '')) ? String(payload.sch) : 'demo'
         return res
           .status(200)
-          .json({ token: signToken({ r: 'n', org: String(payload.org || '') }, SECRET, 14 * 24 * 3600 * 1000) })
+          .json({ token: signToken({ r: 'n', sch, org: String(payload.org || '') }, SECRET, 14 * 24 * 3600 * 1000) })
       }
       return res.status(400).json({ error: 'bad_role' })
     }
@@ -135,19 +142,20 @@ export default async function handler(req, res) {
       if (password.length < 6) return res.status(400).json({ error: 'bad_input' })
 
       let email, app_metadata, uName
+      // schoolId(테넌트) = 토큰의 sch(서버 서명이라 신뢰 가능). 구버전 토큰(sch 없음)은 demo 폴백.
+      const sch = SCH_RE.test(String(p.sch || '')) ? String(p.sch) : 'demo'
       if (p.r === 'n') {
         // 보건교사: 이메일 직접 입력.
         email = String(body.email || '').trim()
         if (!email) return res.status(400).json({ error: 'bad_input' })
-        app_metadata = { role: 'nurse', org: p.org || '' }
+        app_metadata = { role: 'nurse', org: p.org || '', schoolId: sch }
         uName = name || '보건교사'
       } else {
-        // 담임교사: 학년/반으로 결정적 합성 이메일(teacherAuth.ts와 동일 규칙).
+        // 담임교사: 학년/반+학교로 결정적 합성 이메일(teacherAuth.ts와 동일 규칙).
         const g = Number(p.g), c = Number(p.c)
         if (!g || !c) return res.status(403).json({ error: 'bad_token' })
-        const schoolId = process.env.SCHOOL_ID || process.env.VITE_SCHOOL_ID || 'demo'
-        email = `t${g}-${c}@${schoolId}.naum.kr`
-        app_metadata = { role: 'teacher', grade: g, classNo: c }
+        email = `t${g}-${c}@${sch}.naum.kr`
+        app_metadata = { role: 'teacher', grade: g, classNo: c, schoolId: sch }
         uName = name || `${g}-${c} 담임`
       }
       // service-role로 계정 생성 — role/학반은 app_metadata(클라이언트 조작 불가)로 지정.

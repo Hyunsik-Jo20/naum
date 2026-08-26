@@ -11,7 +11,9 @@ import * as sb from '../api/supabaseBackend'
 import * as relay from '../api/supabaseRelay'
 
 export type OutboxOp =
-  | { type: 'createVisit'; visit: Visit; studentId: string }
+  // schoolId: 접수(enqueue) 시점의 학교 — flush가 늦어져 기기 학교가 바뀌어도 오귀속 방지.
+  //  구버전 큐 항목(schoolId 없음)은 flush 시점의 현재 학교로 폴백.
+  | { type: 'createVisit'; visit: Visit; studentId: string; schoolId?: string }
   | { type: 'patchVisit'; id: string; patch: Partial<Visit> }
   | { type: 'deleteVisit'; id: string }
   | { type: 'emitClass'; grade: number; classNo: number; studentId: string; payload: ClassPayload; ts: number }
@@ -94,7 +96,7 @@ export function onChange(cb: () => void): () => void {
 async function exec(op: OutboxOp): Promise<void> {
   switch (op.type) {
     case 'createVisit':
-      return sb.createVisit(op.visit, op.studentId)
+      return sb.createVisit(op.visit, op.studentId, op.schoolId)
     case 'patchVisit':
       return sb.patchVisit(op.id, op.patch)
     case 'deleteVisit':

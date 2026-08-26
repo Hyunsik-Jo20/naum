@@ -8,6 +8,7 @@ import { students } from '../data/mock'
 import { supabase, SUPABASE_ENABLED } from '../data/supabaseClient'
 import { verifyLoginToken, serverSignupNurse, serverSignupTeacher } from '../data/tokenApi'
 import { setTokenAuth, clearKeyCache } from '../data/schoolCrypto'
+import { setSchool, schoolNameById } from '../data/school'
 
 export { SUPABASE_ENABLED }
 
@@ -16,6 +17,7 @@ export interface Session {
   role: Role
   name: string
   org: string // 학교명 또는 교육청
+  schoolId?: string // 멀티테넌트 학교 id(busanSchools 'b###' / 'demo'). edu는 없음(전 학교).
   grade?: number // 교사: 담당 학년
   classNo?: number // 교사: 담당 반
   childId?: string // 학부모: 자녀 학생 id
@@ -61,7 +63,7 @@ function loadTokenSession(): Session | null {
   }
 }
 
-interface TokenPayload { r: 't' | 'p' | 'n'; g?: number; c?: number; sid?: string; n?: string; org?: string }
+interface TokenPayload { r: 't' | 'p' | 'n'; g?: number; c?: number; sid?: string; n?: string; org?: string; sch?: string }
 
 function load(): Session | null {
   try {
@@ -98,23 +100,28 @@ interface AuthCtx {
   logout: () => void
 }
 
-/** profiles 행 → Session 매핑(supabase 모드). */
+/** profiles 행 → Session 매핑(supabase 모드). 학교 소속 역할이면 이 기기의 학교도 바인딩. */
 async function loadProfileSession(userId: string): Promise<Session | null> {
   if (!supabase) return null
   const { data, error } = await supabase
     .from('profiles')
-    .select('role,name,org,grade,class_no,child_id,child_name')
+    .select('role,name,org,school_id,grade,class_no,child_id,child_name')
     .eq('id', userId)
     .single()
   if (error || !data) return null
   const r = data as {
-    role: Role; name: string; org: string
+    role: Role; name: string; org: string; school_id: string | null
     grade: number | null; class_no: number | null; child_id: string | null; child_name: string | null
   }
+  const sch = r.school_id || undefined
+  // 보건교사·담임 로그인 = 이 기기를 해당 학교에 바인딩(키오스크·키캐시·relay 스코프의 기준).
+  //  edu는 전 학교 조회 역할이라 기기 학교를 바꾸지 않는다.
+  if (sch && r.role !== 'edu') setSchool({ id: sch, name: r.org || schoolNameById(sch) })
   return {
     role: r.role,
     name: r.name,
     org: r.org,
+    schoolId: sch,
     grade: r.grade ?? undefined,
     classNo: r.class_no ?? undefined,
     childId: r.child_id ?? undefined,
@@ -218,13 +225,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loginToken: async (token, info) => {
         const p = await verifyLoginToken<TokenPayload>(token)
         if (!p || (p.r !== 't' && p.r !== 'p')) return '토큰이 올바르지 않습니다. 보건교사에게 다시 받아주세요.'
+        clearKeyCache() // 이전(직원/타학교) 키·토큰인증 잔재 제거 — 학교 간 키 혼입 방지
         setTokenAuth(token) // 서명 토큰이면 /api/keys 권한 증명용으로 저장
+        // 토큰의 sch(발급 보건교사의 학교, 서버 스탬프)로 이 기기의 학교 바인딩. 구토큰은 demo.
+        const sch = p.sch || 'demo'
+        const schName = schoolNameById(sch)
+        setSchool({ id: sch, name: schName })
         if (p.r === 't') {
           if (info.grade !== p.g || info.classNo !== p.c) return '학년·반이 토큰과 일치하지 않습니다.'
           const s: Session = {
             role: 'teacher',
             name: info.name?.trim() || `${p.g}-${p.c} 담임`,
-            org: SCHOOL.name,
+            org: schName,
+            schoolId: sch,
             grade: p.g,
             classNo: p.c,
           }
@@ -234,7 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         const childName = (info.childName ?? '').trim()
         if (!p.sid || !childName || childName !== (p.n ?? '')) return '자녀 이름이 토큰과 일치하지 않습니다.'
-        const s: Session = { role: 'parent', name: `${p.n} 보호자`, org: SCHOOL.name, childId: p.sid, childName: p.n }
+        const s: Session = { role: 'parent', name: `${p.n} 보호자`, org: schName, schoolId: sch, childId: p.sid, childName: p.n }
         cacheTokenSession(s)
         setSession(s)
         return null

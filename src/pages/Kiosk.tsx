@@ -8,6 +8,8 @@ import {
   symptomTiles,
 } from '../data/mock'
 import { useVisits } from '../store/visits'
+import { SUPABASE_ENABLED } from '../data/supabaseClient'
+import { hasSchool } from '../data/school'
 import type { Student } from '../types'
 
 type Step = 'id' | 'symptom' | 'done'
@@ -75,6 +77,14 @@ export default function Kiosk() {
           <i className="ti ti-sparkles" aria-hidden="true" /> 편안하게 알려 주세요
         </span>
       </div>
+
+      {/* 멀티테넌트: 이 기기에 학교가 아직 바인딩되지 않음(보건교사 로그인 1회 필요) — 접수는 막지 않되 데모로 기록됨을 안내 */}
+      {SUPABASE_ENABLED && !hasSchool() && (
+        <div className="route-note" style={{ margin: '0 auto 12px', maxWidth: 720 }}>
+          <i className="ti ti-school" aria-hidden="true" /> 이 기기는 아직 학교에 연결되지 않았습니다.
+          이 브라우저에서 <b>보건교사 로그인</b>을 1회 하면 우리 학교로 연결됩니다. (지금 접수하면 데모 학교로 기록)
+        </div>
+      )}
 
       {step === 'id' && (
         <IdStep

@@ -4,10 +4,11 @@ import { useAuth, type Role } from '../store/auth'
 import { SCHOOL } from '../data/location'
 import { classes } from '../data/mock'
 import { teacherEmail } from '../data/teacherAuth'
+import { setSchool, schoolNameById } from '../data/school'
 import InstallButton from '../components/InstallButton'
 
-// v1 서명 토큰의 payload를 로컬에서 읽기(검증 아님, 학반 표시용). 위조는 서버 HMAC이 막음.
-function readTokenPayload(token: string): { r?: string; g?: number; c?: number } | null {
+// v1 서명 토큰의 payload를 로컬에서 읽기(검증 아님, 학반·학교 표시용). 위조는 서버 HMAC이 막음.
+function readTokenPayload(token: string): { r?: string; g?: number; c?: number; sch?: string } | null {
   try {
     const seg = token.trim().split('.')[1]
     return JSON.parse(atob(seg.replace(/-/g, '+').replace(/_/g, '/')))
@@ -143,6 +144,8 @@ export default function Login() {
     const e = await signupTeacher(tk, { name: tkName, password: tSuPw })
     setBusy(false)
     if (e) return setErr(e)
+    // 가입 토큰의 학교로 이 기기 바인딩 — 이어지는 학년/반 로그인의 합성 이메일이 같은 학교로 파생되게.
+    if (p.sch) setSchool({ id: p.sch, name: schoolNameById(p.sch) })
     setTkGrade(p.g); setTkClass(p.c); setTeacherMode('login'); setTPw('')
     setSuMsg(`가입 완료! ${p.g}학년 ${p.c}반 + 비밀번호로 로그인하세요.`)
   }

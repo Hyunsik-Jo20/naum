@@ -5,6 +5,7 @@
 //  · 스코프 키는 localStorage 캐시(오프라인 복호 유지, 노출은 자녀 키 1개 등 스코프 키뿐).
 import { encryptJson, decryptJson, type Enc } from './e2e'
 import { supabase, SUPABASE_ENABLED } from './supabaseClient'
+import { schoolId } from './school'
 
 const SCHOOL_ID = (import.meta.env.VITE_SCHOOL_ID as string | undefined) || 'demo'
 // 폴백 전용(Phase 1). Phase 2에서 이 env를 지우면 서버 발급만 사용.
@@ -25,8 +26,11 @@ const localTokenHex = async (input: string) => toHex(await sha256bytes(`${SECRET
 
 // ── 리소스(키+토큰) 조회: 서버 발급 우선, 폴백 로컬 ──
 type Res = { key?: string; token?: string }
-const LS_CACHE = 'naum.keycache'
+// v2: 멀티테넌트 — 캐시 키를 학교 프리픽스로 스코프(학교 전환·키 체계 변경 시 구캐시 자연 무효).
+const LS_CACHE = 'naum.keycache.v2'
 const LS_TOKENAUTH = 'naum.tokenauth' // 교사·학부모 서명 로그인 토큰(권한 증명)
+// 캐시·메모 키 — 서버가 학교별로 다른 키를 파생하므로 캐시도 학교로 구분해야 한다.
+const ck = (ns: string) => `${schoolId()}|${ns}`
 
 function loadCache(): Record<string, Res> { try { return JSON.parse(localStorage.getItem(LS_CACHE) || '{}') } catch { return {} } }
 function saveCache(c: Record<string, Res>) { try { localStorage.setItem(LS_CACHE, JSON.stringify(c)) } catch { /* ignore */ } }
@@ -55,19 +59,21 @@ async function authForKeys(): Promise<{ headers: Record<string, string>; token?:
 }
 
 async function fetchResource(ns: string, need: 'key' | 'token'): Promise<Res> {
-  const cached = loadCache()[ns]
+  const cacheKey = ck(ns)
+  const cached = loadCache()[cacheKey]
   if (cached && (need === 'key' ? cached.key !== undefined : cached.token !== undefined)) return cached
-  const flightKey = `${ns}|${need}`
+  const flightKey = `${cacheKey}|${need}`
   if (inflight.has(flightKey)) return inflight.get(flightKey)!
   const p = (async (): Promise<Res> => {
     if (SUPABASE_ENABLED) {
       try {
         const { headers, token } = await authForKeys()
+        // ns는 그대로 보낸다 — 학교 스코프는 서버가 호출자(프로필/토큰)로부터 해석(위조 불가).
         const r = await fetch('/api/keys', { method: 'POST', headers, body: JSON.stringify({ action: 'key', ns, token }) })
         if (r.ok) {
           const j = await r.json()
           const res: Res = { key: j.key, token: j.token }
-          const c = loadCache(); c[ns] = { ...c[ns], ...res }; saveCache(c)
+          const c = loadCache(); c[cacheKey] = { ...c[cacheKey], ...res }; saveCache(c)
           return res
         }
         // 403(권한없음)·501(미설정)·기타 → 폴백(Phase 1: 번들 비밀. Phase 2: 비밀 제거되어 폴백은 무효값).
@@ -80,14 +86,15 @@ async function fetchResource(ns: string, need: 'key' | 'token'): Promise<Res> {
 }
 
 async function keyOf(ns: string): Promise<CryptoKey> {
-  const memo = memKey.get(ns)
+  const memoKey = ck(ns)
+  const memo = memKey.get(memoKey)
   if (memo) return memo
   const p = (async () => {
     const res = await fetchResource(ns, 'key')
     const raw = res.key ? fromB64(res.key) : await sha256bytes(`${SECRET}:${ns}`) // 방어적 폴백
     return crypto.subtle.importKey('raw', raw as unknown as BufferSource, 'AES-GCM', false, ['encrypt', 'decrypt'])
   })()
-  memKey.set(ns, p)
+  memKey.set(memoKey, p)
   return p
 }
 async function tokenOf(ns: string): Promise<string> {
@@ -112,7 +119,7 @@ export async function primeStudentTokens(sids: string[]): Promise<void> {
     const c = loadCache()
     for (const sid of sids) {
       const t = j.tokens?.[sid]
-      if (t) c[`student:${sid}`] = { ...c[`student:${sid}`], token: t }
+      if (t) { const k = ck(`student:${sid}`); c[k] = { ...c[k], token: t } }
     }
     saveCache(c)
   } catch { /* 개별 schoolStudentToken 폴백 */ }

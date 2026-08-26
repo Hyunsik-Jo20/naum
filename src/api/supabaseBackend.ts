@@ -6,8 +6,8 @@ import type { Disease, Outcome, Sex, Visit, VisitStatus } from '../types'
 import { supabase } from '../data/supabaseClient'
 import { saveLink } from '../data/localStation'
 import { schoolLinkKey, encryptJson, decryptJson, type Enc } from '../data/schoolCrypto'
-
-const SCHOOL_ID = (import.meta.env.VITE_SCHOOL_ID as string | undefined) || 'demo'
+import { schoolId } from '../data/school'
+import { uniqTopic } from '../data/realtimeUtil'
 
 // DB(snake_case) ↔ Visit(camelCase) 매핑
 interface Row {
@@ -50,10 +50,10 @@ function fromRow(r: Row): Visit {
   }
 }
 
-function toRow(v: Visit): Row & { school_id: string } {
+function toRow(v: Visit, sch: string): Row & { school_id: string } {
   return {
     id: v.id,
-    school_id: SCHOOL_ID,
+    school_id: sch,
     grade: v.grade,
     sex: v.sex,
     symptom_tile_ids: v.symptomTileIds,
@@ -94,7 +94,7 @@ export async function fetchVisits(): Promise<Visit[]> {
   const { data, error } = await sb
     .from('visits')
     .select('*')
-    .eq('school_id', SCHOOL_ID)
+    .eq('school_id', schoolId())
     .order('created_at', { ascending: true })
   if (error) {
     console.error('[naum:supabase] fetchVisits', error.message)
@@ -111,17 +111,17 @@ export async function fetchVisits(): Promise<Visit[]> {
 // unique_violation — 오프라인 큐 재시도로 같은 방문을 다시 넣으면 이미 존재. 성공으로 간주(멱등).
 const DUP = '23505'
 
-export async function createVisit(visit: Visit, studentId: string): Promise<void> {
+export async function createVisit(visit: Visit, studentId: string, sch: string = schoolId()): Promise<void> {
   saveLink(visit.id, studentId) // 로컬 평문(같은 기기)
   const sb = supabase!
-  const { error } = await sb.from('visits').insert(toRow(visit))
+  const { error } = await sb.from('visits').insert(toRow(visit, sch))
   if (error && error.code !== DUP) throw new Error(`createVisit: ${error.message}`) // 재시도 위해 전파
   // 암호화 링크(다기기 이름 복원) — 베스트에포트: 실패해도 방문은 저장됨(+로컬 링크 존재).
   try {
     const enc = await encryptJson(await schoolLinkKey(), studentId)
     const { error: le } = await sb
       .from('visit_links')
-      .insert({ visit_id: visit.id, school_id: SCHOOL_ID, enc, created_at: visit.createdAt })
+      .insert({ visit_id: visit.id, school_id: sch, enc, created_at: visit.createdAt })
     if (le && le.code !== DUP) console.error('[naum:supabase] createVisit link', le.message)
   } catch (e) {
     console.error('[naum:supabase] encrypt link', e)
@@ -134,7 +134,7 @@ export async function fetchLinks(): Promise<Record<string, string>> {
   const { data, error } = await sb
     .from('visit_links')
     .select('visit_id, enc')
-    .eq('school_id', SCHOOL_ID)
+    .eq('school_id', schoolId())
   if (error || !data) return {}
   const key = await schoolLinkKey()
   const out: Record<string, string> = {}
@@ -152,10 +152,10 @@ export async function fetchLinks(): Promise<Record<string, string>> {
 export function subscribeLinks(onLink: (l: { visitId: string; studentId: string }) => void): () => void {
   const sb = supabase!
   const ch = sb
-    .channel('naum-links')
+    .channel(uniqTopic('naum-links'))
     .on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'visit_links', filter: `school_id=eq.${SCHOOL_ID}` },
+      { event: 'INSERT', schema: 'public', table: 'visit_links', filter: `school_id=eq.${schoolId()}` },
       async (payload) => {
         const row = payload.new as { visit_id: string; enc: Enc }
         if (!row?.visit_id) return
@@ -173,19 +173,19 @@ export function subscribeLinks(onLink: (l: { visitId: string; studentId: string 
   }
 }
 
-/** 방문 수정(비식별 필드만). */
+/** 방문 수정(비식별 필드만). school_id 조건 = RLS(0012)와 이중 방어(타 학교 행 오수정 방지). */
 export async function patchVisit(id: string, patch: Partial<Visit>): Promise<void> {
   const sb = supabase!
-  const { error } = await sb.from('visits').update(patchToRow(patch)).eq('id', id)
+  const { error } = await sb.from('visits').update(patchToRow(patch)).eq('id', id).eq('school_id', schoolId())
   if (error) throw new Error(`patchVisit: ${error.message}`) // 재시도 위해 전파
 }
 
-/** 방문 삭제(교실로 가버린 경우 등) — 방문 + 암호화 링크 모두 제거. */
+/** 방문 삭제(교실로 가버린 경우 등) — 방문 + 암호화 링크 모두 제거. 자기 학교 행만. */
 export async function deleteVisit(id: string): Promise<void> {
   const sb = supabase!
-  const { error } = await sb.from('visits').delete().eq('id', id)
+  const { error } = await sb.from('visits').delete().eq('id', id).eq('school_id', schoolId())
   if (error) throw new Error(`deleteVisit: ${error.message}`) // 재시도 위해 전파(삭제는 멱등)
-  const { error: le } = await sb.from('visit_links').delete().eq('visit_id', id)
+  const { error: le } = await sb.from('visit_links').delete().eq('visit_id', id).eq('school_id', schoolId())
   if (le) console.error('[naum:supabase] deleteVisit link', le.message) // 베스트에포트
 }
 
@@ -193,10 +193,10 @@ export async function deleteVisit(id: string): Promise<void> {
 export function subscribeVisits(onVisit: (v: Visit) => void): () => void {
   const sb = supabase!
   const ch = sb
-    .channel('naum-visits')
+    .channel(uniqTopic('naum-visits'))
     .on(
       'postgres_changes',
-      { event: '*', schema: 'public', table: 'visits', filter: `school_id=eq.${SCHOOL_ID}` },
+      { event: '*', schema: 'public', table: 'visits', filter: `school_id=eq.${schoolId()}` },
       (payload) => {
         const row = payload.new as Row
         if (row && row.id) onVisit(fromRow(row))
