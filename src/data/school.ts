@@ -24,12 +24,22 @@ export function getSchool(): SchoolIdent {
   return { ...DEMO }
 }
 
-export function setSchool(s: SchoolIdent): void {
+/** 학교 바인딩 저장. 반환값 = 학교가 실제로 바뀌었는지(미바인딩은 demo로 간주).
+ *  명부·클래스는 모듈 로드 시 확정되므로, true면 호출자가 새로고침해 재초기화해야 한다. */
+export function setSchool(s: SchoolIdent): boolean {
+  let prevId: string | undefined
+  try {
+    const o = JSON.parse(localStorage.getItem(LS) || 'null')
+    if (o && typeof o.id === 'string') prevId = o.id
+  } catch {
+    /* ignore */
+  }
   try {
     localStorage.setItem(LS, JSON.stringify({ id: s.id, name: s.name }))
   } catch {
     /* ignore */
   }
+  return (prevId ?? 'demo') !== s.id
 }
 
 /** 이 기기에 학교가 바인딩됐는지(키오스크 안내용). */

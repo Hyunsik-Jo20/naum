@@ -12,7 +12,7 @@ import * as cloudRelay from '../api/supabaseRelay'
 import { buildTeacherLine } from '../data/notifyText'
 import { sendNurseRequest } from '../data/nurseRequest'
 import { classRoster, hasRoster, nameOf, setClassRoster, upsertOne, type TClassStudent } from '../data/teacherClassRoster'
-import { parseRosterRows, parseRosterCsv, decodeBuffer } from '../data/localRoster'
+import { parseRosterRows, parseRosterCsv, decodeBuffer, ROSTER_TEMPLATE } from '../data/localRoster'
 import { readXlsxFirstSheet } from '../data/xlsxReader'
 import { setBadge, clearBadge } from '../data/appBadge'
 
@@ -197,8 +197,22 @@ export default function TeacherView() {
           <button className="btn" style={{ alignSelf: 'flex-end' }} onClick={doTransfer}><i className="ti ti-user-plus" aria-hidden="true" /> 전학생 안내</button>
         </div>
         {tMsg && <div className="route-note" style={{ marginBottom: 8 }}>{tMsg}</div>}
-        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+        <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button className="btn ghost small" onClick={() => fileRef.current?.click()}><i className="ti ti-upload" aria-hidden="true" /> 반 명부 엑셀/CSV 업로드</button>
+          <button
+            className="btn ghost small"
+            onClick={() => {
+              const blob = new Blob(['﻿' + ROSTER_TEMPLATE], { type: 'text/csv;charset=utf-8' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = '반명부_양식.csv'
+              a.click()
+              URL.revokeObjectURL(url)
+            }}
+          >
+            <i className="ti ti-download" aria-hidden="true" /> 양식 내려받기
+          </button>
           <span className="muted" style={{ fontSize: 12 }}>{hasRoster0 ? `명부 ${roster.length}명 (이 기기에만 저장)` : '미업로드 — 번호만 표시'}</span>
           <input ref={fileRef} type="file" accept=".xlsx,.csv,.tsv,.txt" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) void onUpload(f); e.currentTarget.value = '' }} />
         </div>

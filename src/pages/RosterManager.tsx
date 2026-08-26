@@ -11,6 +11,7 @@ import {
   saveRoster,
 } from '../data/localRoster'
 import { readXlsxFirstSheet } from '../data/xlsxReader'
+import { schoolId, getSchool } from '../data/school'
 import {
   TEACHER_TEMPLATE,
   clearTeacherRoster,
@@ -108,7 +109,10 @@ export default function RosterManager() {
   }
 
   function reset() {
-    if (!confirm('업로드한 명부를 지우고 기본(데모) 명부로 되돌릴까요?')) return
+    const msg = schoolId() === 'demo'
+      ? '업로드한 명부를 지우고 기본(데모) 명부로 되돌릴까요?'
+      : '업로드한 명부를 지울까요? (빈 명부가 됩니다 — 키오스크 접수 불가)'
+    if (!confirm(msg)) return
     clearRoster()
     window.location.reload()
   }
@@ -145,7 +149,7 @@ export default function RosterManager() {
             <i className="ti ti-users" style={{ verticalAlign: -2 }} aria-hidden="true" /> 현재 명부
           </div>
           <span className={`report-badge ${custom ? 'done' : ''}`}>
-            {custom ? '업로드 명부' : '기본(데모) 명부'}
+            {custom ? `업로드 명부 · ${getSchool().name}` : schoolId() === 'demo' ? '기본(데모) 명부' : '명부 없음 — 업로드 필요'}
           </span>
         </div>
         <div className="kpi-grid" style={{ marginBottom: 0 }}>

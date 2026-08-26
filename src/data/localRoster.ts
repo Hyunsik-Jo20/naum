@@ -1,7 +1,10 @@
 // 로컬 학생 명부 — 보건교사가 업로드(CSV)하면 이 브라우저(localStorage)에만 저장.
-// 학생 PII는 로컬을 벗어나지 않는다. 미업로드 시 기본(데모) 명부 사용.
+// 학생 PII는 로컬을 벗어나지 않는다.
+//  · 데모 학교('demo'): 미업로드 시 내장 데모 명부(연수·시연용).
+//  · 실학교(멀티테넌트): 미업로드 시 빈 명부 — 데모 학생이 실학교 화면에 나오면 안 됨.
 import type { Sex, Student } from '../types'
 import { roster as DEFAULT_ROSTER } from './roster'
+import { schoolId } from './school'
 
 const LS_KEY = 'naum.roster'
 
@@ -12,7 +15,7 @@ function load(): Student[] {
   } catch {
     /* ignore */
   }
-  return DEFAULT_ROSTER
+  return schoolId() === 'demo' ? DEFAULT_ROSTER : []
 }
 
 export function saveRoster(list: Student[]) {

@@ -41,6 +41,7 @@ export default function Kiosk() {
 
   function simulateQr() {
     // 실제로는 QR(로컬 난수 ID)을 스캔 → 로컬에서 학생으로 해석
+    if (students.length === 0) return // 명부 없음(실학교 미업로드)
     const s = students[Math.floor(Math.random() * students.length)]
     chooseStudent(s, true)
   }
@@ -86,7 +87,19 @@ export default function Kiosk() {
         </div>
       )}
 
-      {step === 'id' && (
+      {/* 실학교 미업로드: 명부가 없으면 접수 불가 — 데모 학생이 실학교 화면에 나오면 안 됨 */}
+      {students.length === 0 ? (
+        <div className="kiosk-card" style={{ textAlign: 'center' }}>
+          <div className="kiosk-eyebrow">
+            <i className="ti ti-clipboard-list" aria-hidden="true" /> 준비 중이에요
+          </div>
+          <p className="kiosk-q">아직 학생 명부가 없어요</p>
+          <p className="kiosk-sub">
+            보건 선생님이 <b>명부 관리</b>에서 우리 학교 학생 명부(엑셀/CSV)를 올리면,
+            <br />이 화면에 우리 학교 학년·반이 자동으로 표시됩니다.
+          </p>
+        </div>
+      ) : step === 'id' && (
         <IdStep
           pickedClass={pickedClass}
           onQr={simulateQr}

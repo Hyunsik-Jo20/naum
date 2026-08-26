@@ -123,7 +123,9 @@ export default function Login() {
     if (e) return setErr(e)
     // 역할별 이동은 useEffect(session)가 처리.
   }
-  const tkClassNos = classes.filter((c) => Number(c.split('-')[0]) === tkGrade).map((c) => Number(c.split('-')[1])).sort((a, b) => a - b)
+  // 클라우드 담임 로그인/가입용 학년·반 — 학생 명부와 무관(교사 기기엔 명부가 없음). 반은 토큰이 최종 검증.
+  const TK_GRADES = [1, 2, 3, 4, 5, 6]
+  const TK_CLASSNOS = Array.from({ length: 15 }, (_, i) => i + 1)
 
   // 담임교사 계정 로그인 — 학년/반으로 합성 이메일 도출.
   async function doTeacherLogin() {
@@ -246,10 +248,10 @@ export default function Login() {
                     <>
                       <div className="row" style={{ gap: 8 }}>
                         <label className="login-field" style={{ flex: 1 }}>학년
-                          <select value={tkGrade} onChange={(e) => setTkGrade(Number(e.target.value))}>{grades.map((g) => <option key={g} value={g}>{g}학년</option>)}</select>
+                          <select value={tkGrade} onChange={(e) => setTkGrade(Number(e.target.value))}>{TK_GRADES.map((g) => <option key={g} value={g}>{g}학년</option>)}</select>
                         </label>
                         <label className="login-field" style={{ flex: 1 }}>반
-                          <select value={tkClass} onChange={(e) => setTkClass(Number(e.target.value))}>{tkClassNos.map((c) => <option key={c} value={c}>{c}반</option>)}</select>
+                          <select value={tkClass} onChange={(e) => setTkClass(Number(e.target.value))}>{TK_CLASSNOS.map((c) => <option key={c} value={c}>{c}반</option>)}</select>
                         </label>
                       </div>
                       <label className="login-field">비밀번호

@@ -8,7 +8,7 @@ import { students } from '../data/mock'
 import { supabase, SUPABASE_ENABLED } from '../data/supabaseClient'
 import { verifyLoginToken, serverSignupNurse, serverSignupTeacher } from '../data/tokenApi'
 import { setTokenAuth, clearKeyCache } from '../data/schoolCrypto'
-import { setSchool, schoolNameById } from '../data/school'
+import { setSchool, schoolNameById, schoolId } from '../data/school'
 
 export { SUPABASE_ENABLED }
 
@@ -208,6 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loginPassword: async (email, password) => {
         if (!supabase) return '클라우드 인증이 설정되지 않았습니다.'
         if (!email.trim() || !password) return '이메일과 비밀번호를 입력하세요.'
+        const prevSch = schoolId() // 로그인 전 이 기기의 학교(미바인딩=demo)
         const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
         if (error) return '이메일 또는 비밀번호가 올바르지 않습니다.'
         const s = data.user ? await loadProfileSession(data.user.id) : null
@@ -219,6 +220,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearKeyCache() // 교사/학부모 토큰인증·스코프 키 캐시 제거(직원 세션과 섞이지 않게)
         setSession(s)
         cacheSession(s) // 오프라인 복원용
+        // 학교가 바뀌었으면 새로고침 — 명부·학급(정적 모듈)이 이전 학교(또는 데모)로 초기화돼 있어 재초기화 필요.
+        if (s.role !== 'edu' && s.schoolId && s.schoolId !== prevSch) window.location.reload()
         return null
       },
       // 교사·학부모 토큰 로그인 — 토큰 복호 + 입력 정보 매칭 → 로컬 세션.
@@ -230,7 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // 토큰의 sch(발급 보건교사의 학교, 서버 스탬프)로 이 기기의 학교 바인딩. 구토큰은 demo.
         const sch = p.sch || 'demo'
         const schName = schoolNameById(sch)
-        setSchool({ id: sch, name: schName })
+        const schChanged = setSchool({ id: sch, name: schName })
         if (p.r === 't') {
           if (info.grade !== p.g || info.classNo !== p.c) return '학년·반이 토큰과 일치하지 않습니다.'
           const s: Session = {
@@ -243,6 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           cacheTokenSession(s)
           setSession(s)
+          if (schChanged) window.location.reload() // 정적 명부 모듈 재초기화
           return null
         }
         const childName = (info.childName ?? '').trim()
@@ -250,6 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const s: Session = { role: 'parent', name: `${p.n} 보호자`, org: schName, schoolId: sch, childId: p.sid, childName: p.n }
         cacheTokenSession(s)
         setSession(s)
+        if (schChanged) window.location.reload()
         return null
       },
       // 보건교사 회원가입 — 교육청 가입 토큰 검증 후 Supabase 계정 생성(role=nurse 프로필 자동).
