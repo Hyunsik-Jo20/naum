@@ -8,6 +8,7 @@
 - **학교 바인딩 체인**: 교육청이 명부에서 학교 선택→가입토큰(`{r:'n',sch,org}`)→가입 시 profiles.school_id→교사/학부모 토큰에 서버가 sch 스탬프→로그인 시 기기 바인딩(`naum.school`, `data/school.ts`)→키오스크가 그 학교로 접수(미바인딩 시 안내 배너, demo 기록).
 - **교육청 대시보드 실데이터**(`data/eduLive.ts`): 전 학교 비식별 방문 90일 조회(.range 페이징)+Realtime 구독(RLS 스코프)+실측 집계(월간추이·주간 학교통계+28운영일 baseline·학년성별·시간대·날씨조인·오늘 감염병 보고). **eduMock 합성지표·monthly 0.93/0.86·날씨→방문 모형·시간대 가중치·학년성별 노이즈·"받은 보고" 하드코딩 전부 삭제.** 감염병 조기탐지 로직(surveillance)은 입력만 실측으로 교체. 전월/전년 비교는 실데이터 있을 때만 표시.
 - **버그 수정**: visit id 테넌트 충돌 유실(id에 학교+시각 포함), loginToken 키캐시 미정리.
+- **버그 수정(2026-08-27, 첫 실온보딩에서 발현)**: 서버 가입이 전부 teacher/demo로 떨어지던 문제 — GoTrue가 사용자 INSERT 후 app_metadata를 병합해 AFTER INSERT 트리거가 metadata 없는 시점을 봄(0008부터 잠복). token.js가 가입 성공 시 **profiles를 service-role로 직접 upsert**(role·school_id·학반 확정, 실패 시 502). 라이브 프로브로 재현→수정→재검증(nurse/b153) 완료.
 - ✅ **0012 적용 + 정리 SQL 실행 + 라이브 전체 실검증 완료(2026-08-26)**: my_role/my_school_id 함수 정상(nurse=demo) · RLS 매트릭스(nurse=자교 15행 / edu=전체 15행 / **teacher=0행 차단**) · 정리(visit_links·relay_* 전부 0행) · 키 학교 스코프 파생(links 키가 비스코프 시절과 상이) · E2E(키오스크 접수→새 id `v-demo-{시각36}-{n}`·school_id 스탬프→새 키로 링크 암호화→콘솔 이름복원(장지호)→자교 삭제) · 교육청 대시보드 실데이터 모드(총방문 0·642교·데이터 0·"받은 보고" 실집계·목 문구 소멸) · 콘솔 에러 0. **남은 운영 조치: 기존 교사/학부모 토큰 재발급뿐.** 상세: [SUPABASE_SETUP §5-3].
 - **수용 리스크(P1)**: anon 키오스크 INSERT school_id 스푸핑(rate-limit/Turnstile 후속), relay anon insert 제한. 시연: edu 대시보드는 demo 제외라 **로컬 더미로는 교육청 화면이 안 채워짐** — 실학교 계정 1~2곳으로 시연 권장.
 
