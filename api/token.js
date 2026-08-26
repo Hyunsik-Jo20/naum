@@ -141,7 +141,7 @@ export default async function handler(req, res) {
       const name = String(body.name || '').trim()
       if (password.length < 6) return res.status(400).json({ error: 'bad_input' })
 
-      let email, app_metadata, uName
+      let email, app_metadata, uName, profileRow
       // schoolId(테넌트) = 토큰의 sch(서버 서명이라 신뢰 가능). 구버전 토큰(sch 없음)은 demo 폴백.
       const sch = SCH_RE.test(String(p.sch || '')) ? String(p.sch) : 'demo'
       if (p.r === 'n') {
@@ -150,6 +150,7 @@ export default async function handler(req, res) {
         if (!email) return res.status(400).json({ error: 'bad_input' })
         app_metadata = { role: 'nurse', org: p.org || '', schoolId: sch }
         uName = name || '보건교사'
+        profileRow = { role: 'nurse', name: uName, org: p.org || '', school_id: sch, grade: null, class_no: null }
       } else {
         // 담임교사: 학년/반+학교로 결정적 합성 이메일(teacherAuth.ts와 동일 규칙).
         const g = Number(p.g), c = Number(p.c)
@@ -157,6 +158,7 @@ export default async function handler(req, res) {
         email = `t${g}-${c}@${sch}.naum.kr`
         app_metadata = { role: 'teacher', grade: g, classNo: c, schoolId: sch }
         uName = name || `${g}-${c} 담임`
+        profileRow = { role: 'teacher', name: uName, org: '', school_id: sch, grade: g, class_no: c }
       }
       // service-role로 계정 생성 — role/학반은 app_metadata(클라이언트 조작 불가)로 지정.
       const cr = await fetch(`${SB_URL}/auth/v1/admin/users`, {
@@ -170,7 +172,32 @@ export default async function handler(req, res) {
           app_metadata,
         }),
       })
-      if (cr.ok) return res.status(200).json({ ok: true })
+      if (cr.ok) {
+        // ★ 프로필 직접 확정(service-role upsert) — GoTrue가 사용자 행을 먼저 INSERT하고
+        //   app_metadata를 나중에 병합하므로, AFTER INSERT 트리거는 metadata가 없는 시점을 보고
+        //   기본값(teacher/demo) 프로필을 만든다(잠복 버그, 첫 실가입에서 발현). 트리거에 의존하지
+        //   않고 서버가 토큰 payload 기준으로 role/school/학반을 직접 upsert해 확정한다.
+        try {
+          const created = await cr.json()
+          const uid = created?.id || created?.user?.id
+          if (uid) {
+            const pr = await fetch(`${SB_URL}/rest/v1/profiles?on_conflict=id`, {
+              method: 'POST',
+              headers: {
+                apikey: SERVICE,
+                Authorization: `Bearer ${SERVICE}`,
+                'content-type': 'application/json',
+                Prefer: 'resolution=merge-duplicates',
+              },
+              body: JSON.stringify({ id: uid, ...profileRow }),
+            })
+            if (!pr.ok) return res.status(502).json({ error: 'profile_failed', detail: (await pr.text()).slice(0, 200) })
+          }
+        } catch (e) {
+          return res.status(502).json({ error: 'profile_failed', detail: String(e).slice(0, 200) })
+        }
+        return res.status(200).json({ ok: true })
+      }
       const t = await cr.text()
       if (/registered|already|exist|duplicate/i.test(t)) return res.status(409).json({ error: 'exists' })
       return res.status(502).json({ error: 'create_failed', detail: t.slice(0, 200) })
