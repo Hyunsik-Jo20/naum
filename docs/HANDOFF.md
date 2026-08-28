@@ -1,7 +1,26 @@
 # 나음(NaUM) — 다음 세션 이어가기 (핸드오프)
 
 > **새 세션은 이 파일부터 읽으세요.** 상세 이력은 [PROGRESS.md](PROGRESS.md), 배포·계정은 [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
-> 최종 업데이트: 2026-08-26 (**공용 멀티테넌트 전환 + 교육청 실시간 실데이터 대시보드** — 목데이터 전면 삭제. 2학기 각급학교 확산용)
+> 최종 업데이트: 2026-08-28 (**실학교 온보딩 실전 + 보건교사 현장 피드백 5종 + 로컬 PII 저장 암호화**. 멀티테넌트 라이브 운영 중 — 실학교 3곳 온보딩/시뮬 완료)
+
+## ★★★ 이번 세션(2026-08-27~28) — 실학교 온보딩 실전·현장 피드백·저장 암호화
+- **실학교 온보딩 현황**: 주감초(b153)·명진초(b259)·동원초(b83) 온보딩/시뮬레이션 진행.
+  - 명진초 시뮬 1건 **완벽 검증**(접수→복통→투약(부루펜)→교실복귀, id `v-b259-…`).
+  - 동원초 3건 중 1건 완료(⚠처치에 이메일 `cocoa72@hanmail.net` 혼입 — PII 가드 도입 계기), 2건 treating 방치(중복 접수 추정).
+  - **시뮬 데이터 삭제 SQL 전달됨 — 실행 여부 미확인(아래 체크리스트)**. 교육청 대시보드 실시간 반영 확인(데이터 보유 2개교·KPI·시간대 실측).
+- **실학교 데모 명부 폴백 수정**(주감초에서 발견): 데모 명부(테스트초 학생)는 `school_id='demo'`에서만. 실학교는 업로드 전 **빈 명부**+키오스크 안내("아직 학생 명부가 없어요"). 로그인 시 학교가 바뀌면 **자동 새로고침**(정적 명부 모듈 재초기화). 담임 로그인 학년/반 선택은 명부 비의존(정적 1~6학년·1~15반 — 교사 기기엔 학생 명부 없음).
+- **PII 입력 가드**(`data/piiGuard.ts`): 처치·기타·약/물품 자유입력(클라우드로 감)에서 **이메일·전화번호·주민번호 감지 시 저장 차단**(경고). 기타란 잔여 텍스트 포함 완료/사후보완 경로까지. 패턴 오탐 테스트("119 신고"·"체온 37.5℃" 통과) + dev E2E 검증.
+- **보건교사 현장 피드백 5종 반영**:
+  ① 인체도에 **손가락(좌/우)** 부위 추가(총 21존, `BodyMapModal`) — 초등 손가락 부상 빈발.
+  ② **인계서 출력**(`TreatPanel.printHandoff`): 결과=귀가/병원 이송 시 버튼 → 브라우저 인쇄로 "보건실 처치 확인서"(학생·증상·병명·처치·결과·시각·보호자연락처·서명란·진단서아님 고지) 종이/PDF. 개인정보는 로컬 조합(클라우드 경유 없음). 방식 선정 이유: 병원 제출은 서면 표준+PDF 저장 겸용+인프라 0.
+  ③ **키오스크 반·이름·증상 버튼 1.5배**(index.css — 기본 52/56/126→78/84/188px + 반응형 전 구간 비례 상향).
+  ④ **증상 목록 편집**(콘솔 "증상 목록 편집" → `SymptomEditModal`): 추가(라벨·계통·기본병명)/삭제/순서/기본복원. `naum.symptoms`(기기별) 저장, 적용=새로고침(명부 패턴), '잘 모르겠어요' 삭제 보호. mock.ts `symptomTiles`가 LS 우선 로드.
+  ⑤ 보건일지 엑셀 "증상·처치·결과" 칸 **ShrinkToFit**(`excel.ts` cellLShrink) — 칸 이탈 방지.
+- **로컬 PII 저장 시 암호화**(`data/secureStore.ts`): `naum.roster`·`naum.teacherRoster`·`naum.station.links`·`naum.cache.visits`를 **서버 발급 학교 키(AES-GCM, links 키 재사용)** 로 암호화 저장. `main.tsx`가 부트로더(복호→메모리 미러)→`appMain.tsx` 동적 로드(명부가 모듈 init 시 동기 읽기라). 평문 레거시 자동 승격, 실패 시 가용성 우선(평문 폴백+경고). **한계(정직)**: 키캐시가 같은 기기에 있어 기기 완전 장악 시 복호 가능 — 기기 잠금/OS 보안이 1차 방어. 검증: 평문→`__sec` 암호문 승격·이름/전화 노출 0·복호 후 키오스크 정상.
+- **운영 지식(문답 정리)**:
+  - **태블릿 키오스크 + PC 콘솔 병행**: 같은 학교 로그인이면 클라우드 실시간 동기(접수→콘솔 수초). 이름복원은 기기별 로컬 명부 → **반드시 같은 명부 파일을 양쪽에 업로드**(학생 id가 파일 행 순서 기반 — 다른 버전이면 매칭 어긋남). 증상 편집·투약/비품 목록은 기기별. 학부모 배치발송 설정은 콘솔 기기만(키오스크 기기는 실시간 기본 유지).
+  - **키 관리**: 학교 키는 사람이 보는 값이 아님(서버가 인증자에게 자동 발급, 화면 미노출). 뿌리는 Vercel `SCHOOL_MASTER_SECRET` — **변경 금지**(전 학교 암호화 데이터 복호 불가).
+  - **파일 반출 경계**: 명부 원본 엑셀·보건일지 다운로드 파일은 앱 밖 **평문** — 학교 문서보안 수칙 영역(업로드 후 원본 정리·보건일지 엑셀 자체 암호·BitLocker 권장). 앱 내 안내 문구 추가는 **제안만 된 상태(미결정)**.
 
 ## ★★ 멀티테넌트 전환(2026-08-26) — 사용자 확정: 공용 멀티테넌트·목데이터 삭제·교육청 실시간
 - **구조**: 한 배포·한 DB, 테넌트 id = busanSchools id(`b###`), `demo`=시연 전용(실집계 제외). 격리는 **RLS 0012**(nurse=자교만 조회·수정·삭제 / edu=전 학교 비식별 조회 / visit_links·relay_nurse_inbox nurse 자교만 / app_state 쓰기 edu 전용). 키·토큰은 **학교별 파생**(서버가 `${sch}|${ns}` 프리픽스, 발급자 프로필/서명 토큰의 sch만 신뢰 — 위조 불가). 담임 이메일 `t{g}-{c}@{sch}.naum.kr`.
@@ -20,15 +39,26 @@
 - **학부모 알림 배치 발송**(`data/parentNotify.ts`, `components/ParentNotifyModal.tsx`): 실시간 발신이 학부모 즉시 민원을 유발해 처치 방해 → **실시간/하루1회/하루2회/매시 정각** 중 선택해 특정 시간에 모아 발송. 콘솔 "알림 대상" 옆 "학부모 발송: {요약}" 버튼→설정창. 배치 모드는 학부모 알림을 로컬 큐에 쌓고 **보건실 콘솔 스케줄러**(`flushDue`: 마운트 catch-up + 30초 틱)가 지정 시각 도래 시 offline 아웃박스로 발신. **담임 알림은 항상 실시간**. 검증(dev): 완료 시 학부모=큐/담임=즉시, 시각 도래 시 flush로 큐 비움·중복방지(`lastFlush`). ⚠️운영: 배치 발송은 콘솔이 켜져 있어야 나감(시각 지난 뒤 콘솔 열면 밀린 것 이어서 발송). 큐는 이 기기 localStorage.
 - **시연용 로컬 더미 데이터**(`demo-local/`, **gitignore**): 다른 보건교사·교육청 시연용. 나음의 개인정보 로컬 보관 원칙과 동일하게 `naum.cache.visits`+`naum.station.links`(로컬)에만 주입 → **그 기기에서만** 보이고 클라우드·레포·다른 컴퓨터엔 안 감. 사용: 시연 브라우저에서 배포앱 로그인 → F12 콘솔에 `demo-local/naum-demo-seed.js` 붙여넣기(방문 17건). 제거: `naumClearDemo()`. `v-demo-*`는 클라우드 미업로드.
 
-## ⏳ 다음 세션 시작 체크리스트 — 사용자(관리자) 대기 조치
-> 코드는 전부 배포됨(`git push` 완료). 아래는 **사용자가 Supabase/Vercel에서 해야** 활성화되는 것들. 새 세션은 먼저 "이거 하셨나요?"로 상태 확인.
+## ⏳ 다음 세션 시작 체크리스트
+> 코드는 전부 배포됨(`git push` 완료). 새 세션은 아래를 "이거 하셨나요?"로 먼저 확인.
 
-| 조치 | 무엇 | 안 하면 |
+**① 확인 필요(사용자 조치 대기)**
+| 조치 | 내용 | 미조치 시 |
 |---|---|---|
-| **솔라피 SMS** | 발신번호 등록 + 카카오 템플릿 승인 → Vercel `SOLAPI_*` env → 처치완료 흐름에 `sendSms` 연결 | SMS 발송 안 됨(501) |
+| **시뮬 데이터 삭제 SQL 실행 여부** | 명진초(b259)·동원초(b83) 시뮬 방문 삭제 — `delete from visit_links where school_id in ('b259','b83'); delete from visits where school_id in ('b259','b83');` (+선택: relay truncate) | 교육청 대시보드에 시뮬 수치가 실데이터로 계속 잡힘(동원초 건엔 이메일 혼입 처치 포함) |
+| **구토큰 재발급** | 멀티테넌트 전환 전 발급한 교사/학부모 토큰(sch 없음)은 demo 귀속 — 실학교 운영 계정은 재발급 | 구토큰 사용자가 demo로 붙음 |
+| **솔라피 SMS** | 발신번호 등록 + 카카오 템플릿 승인 → Vercel `SOLAPI_*` env → `sendSms` 연결 | SMS 발송 안 됨(501) |
 | **행안부 긴급재난문자** | data.go.kr 활용신청 + 호출 IP 등록 | 지진·특보는 되나 재난문자만 빠짐 |
 
-**적용 완료(참고)**: 0008(토큰 게이트)·**0009(RLS 강화, 2026-07-29)**·0010(교사→보건교사 relay)·**0011(담임 반 스코프, 2026-07-29)**·키서버 Phase 1·**키서버 Phase 2(2026-07-29, 아래)**·토큰 게이트 env. **기상특보·지진은 실연동 완료.** → **모든 마이그레이션(0001~0011) + 키서버 2단계 완료.** 남은 대기 조치는 외부 기관 승인건(솔라피·행안부)뿐.
+**② 개발 백로그(우선순위 제안순)**
+- 파일 반출 안내 문구(명부 업로드 완료 시 원본 정리 안내·보건일지 다운로드 시 개인정보 주의) — **사용자 미결정**, 제안 상태
+- P1 보안 후속: anon 키오스크 INSERT school_id 스푸핑 방지(rate-limit/Turnstile), relay anon insert 크기·횟수 제한, signup IP 제한
+- 가입 토큰 단회용/승인제(현재 유효기간 내 재사용 가능 — 다계정 가입 용도이기도 함, 정책 결정 필요)
+- 교사 기기 로컬 저장 암호화(`naum.teacherclassroster` — links 키가 nurse 전용이라 반 키 필요)
+- SchoolAdminPanel 학교별 가입/데이터 보유 뱃지(멀티테넌트 계획 중 미구현분)
+- 교육청 공지 클라우드 릴레이(현재 로컬 시뮬 — 같은 브라우저만), Web Push(교사 배지 완전종료 상태 갱신)
+
+**적용 완료(참고)**: 마이그레이션 0001~**0012(멀티테넌트 RLS)** 전부 적용·라이브 검증. 키서버 Phase 1+2(번들 비밀 제거)·학교별 키 파생·토큰 게이트 env. 기상특보·지진 실연동. 데모 로그인 제거·PII 입력가드·로컬 저장 암호화.
 
 **키서버 Phase 2 완료·실검증(2026-07-29)**: Vercel `VITE_SCHOOL_LINK_SECRET` 삭제 + 무캐시 재배포. 검증 — ① 새 번들 `index-ws1NaADO.js`에 비밀 문자열 **없음** ② 서버 발급 키가 제거 전과 **바이트 동일**(links·class·student·token) ③ 보건교사 콘솔이 서버 키로 visit_links/relay 복호 → **실제 이름 복원 정상**(김도윤·강지아·장지호), 콘솔 에러 0. **마스터 비밀이 클라 번들에서 사라짐 = 6-4②(학교 비밀 번들 노출) 실제 수정 완료.**
 
@@ -157,11 +187,20 @@ git push           # → Vercel 자동 재배포
 - **검증**: 실제 `api/token.js` 핸들러 13종 통과(HMAC 라운드트립·변조/만료/타비밀 위조 거부·발급/가입 게이팅·501 폴백·405) + dev 폴백 라운드트립(발급→검증) 확인 + 빌드 통과.
 - 연수 데이터 정리: `delete from public.visits; delete from public.visit_links; delete from public.relay_class_inbox; delete from public.relay_student_inbox;`
 
-## 8. 핵심 파일 지도 (이번 세션 추가분)
-- `src/store/visits.tsx` — 3모드 데이터계층(add/start/complete/update/**delete**Visit), 오프라인 캐시·아웃박스, 오늘필터는 NurseQueue
-- `src/store/auth.tsx` — 이메일+비번 / **토큰로그인(loginToken)** / **회원가입(signupNurse)** / 로그인유지 / 오프라인 세션캐시
-- `src/data/` — `supabaseClient` · `schoolCrypto`(키·토큰·로그인토큰) · `offline`(아웃박스) · `localStation` · `aiTriage` · `ai`(프롬프트) · `notifyText` · **`notifyTargets`(알림 대상)** · `localRoster`(학생명부) · **`teacherRoster`(담임명부)** · `location`(SCHOOL=테스트초등학교)
-- `src/api/` — `supabaseBackend`(visits·links·delete·Realtime) · `supabaseRelay` · `backend`(Node)
+## 8. 핵심 파일 지도
+**부팅**: `src/main.tsx`(부트로더 — secureStore 복호 후) → `src/appMain.tsx`(React 렌더·SW 등록)
+- `src/store/visits.tsx` — 3모드 데이터계층(add/start/complete/update/delete), 오프라인 캐시(암호화)·아웃박스
+- `src/store/auth.tsx` — 이메일+비번 / 토큰로그인 / 회원가입 / 학교 바인딩(setSchool)·학교 전환 시 리로드
+- `src/data/` 핵심:
+  - **멀티테넌트**: `school.ts`(기기 학교 바인딩 naum.school·schoolId()) · `eduLive.ts`(교육청 실데이터 조회/실시간/집계) · `realtimeUtil.ts`(uniqTopic·onWake)
+  - **보안**: `secureStore.ts`(로컬 PII 저장 암호화) · `piiGuard.ts`(자유입력 개인정보 차단) · `schoolCrypto.ts`(학교 키 — 캐시 naum.keycache.v2, `${school}|${ns}` 스코프)
+  - **명부/PII(전부 암호화 저장)**: `localRoster`(학생) · `teacherRoster`(담임) · `localStation`(재식별 링크)
+  - **설정(기기별)**: `mock.ts symptomTiles`(naum.symptoms 우선) · `meds`/`supplies`(투약/비품) · `treatments`(처치 순서) · `notifyTargets` · `parentNotify`(배치 발송)
+  - 기타: `supabaseClient` · `offline`(아웃박스) · `aiTriage`/`ai` · `notifyText` · `location`(데모 좌표 폴백) · `bogeonLog`/`dailyReport`/`excel`(보건일지 — 실데이터만·cellLShrink)
+- `src/api/` — `supabaseBackend`(visits·links·Realtime, 런타임 schoolId 스코프) · `supabaseRelay`(반/학생/보건교사 릴레이)
+- `src/components/` 주요 모달 — `TreatPanel`(AI·체온·인체도·투약·인계서출력 printHandoff) · `BodyMapModal`(21존, 손가락 포함) · `ItemPickerModal`(투약/비품) · `SymptomEditModal`(증상 편집) · `ParentNotifyModal` · `EduNurseTokenModal`(학교 검색 발급) · `LoginTokenModal`
+- `api/`(Vercel 서버리스) — `token.js`(HMAC 발급/검증/가입+프로필 직접 upsert) · `keys.js`(학교별 키 파생, nurse 전용) · `proxy.js` · `sms.js`(솔라피 대기)
+- `supabase/migrations/` — 0001~**0012**(멀티테넌트 RLS) 전부 적용됨
 - `src/components/` — `TreatPanel`(AI·체온·관찰·삭제) · `TempPickerModal` · `ObservePickerModal` · `AiSettingsModal` · `LoginTokenModal`(보건교사→교사·학부모) · `EduNurseTokenModal`(교육청→보건교사) · `SyncStatus` · `InstallButton` · `SchoolAdminPanel`(임시·영구저장)
 - `api/proxy.js` + `vercel.json`(rewrite) — data.go.kr 프록시(서버 키). `api/health.js`.
 - `supabase/migrations/0001~0007`
