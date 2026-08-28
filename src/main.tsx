@@ -1,29 +1,10 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
-import App from './App'
-import { VisitsProvider } from './store/visits'
-import { NoticeProvider } from './store/notices'
-import { SchoolsProvider } from './store/schools'
-import { AuthProvider } from './store/auth'
-import { registerSW } from 'virtual:pwa-register'
-import './index.css'
+// 부트로더 — 로컬 PII 저장소(암호화)를 먼저 복호한 뒤 앱 모듈을 로드한다.
+//  명부·재식별 링크 등이 모듈 초기화 시 "동기"로 읽히기 때문에, 복호가 끝나기 전에
+//  앱 모듈이 평가되면 안 된다(동적 import로 평가 시점을 미룸).
+import { initSecureStore } from './data/secureStore'
 
-// 서비스워커 등록 — 앱 셸 캐시(오프라인 실행) + 새 버전 자동 업데이트.
-registerSW({ immediate: true })
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        <VisitsProvider>
-          <NoticeProvider>
-            <SchoolsProvider>
-              <App />
-            </SchoolsProvider>
-          </NoticeProvider>
-        </VisitsProvider>
-      </AuthProvider>
-    </BrowserRouter>
-  </React.StrictMode>,
-)
+void initSecureStore()
+  .catch((e) => console.error('[naum:secure] init 실패 — 빈 값으로 진행', e))
+  .finally(() => {
+    void import('./appMain')
+  })

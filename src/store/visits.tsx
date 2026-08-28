@@ -19,6 +19,7 @@ import { tileById } from '../data/mock'
 import { loadNotifyTargets } from '../data/notifyTargets'
 import { emitParent } from '../data/parentNotify'
 import { schoolId } from '../data/school'
+import { getSecureRaw, setSecureRaw } from '../data/secureStore'
 
 /**
  * 로컬/서버 분리 — 세 가지 모드로 동작(우선순위 supabase > backend > local):
@@ -56,21 +57,18 @@ interface Store { visits: Visit[]; links: Record<string, string> }
 let SEED: Store | null = null
 
 // 오프라인 캐시(supabase 모드) — 인터넷 없이도 콘솔/키오스크가 마지막 상태 + 로컬 신규를 보여줌.
+//  links(재식별)가 포함되므로 secureStore(학교 키 암호화) 경유로 저장.
 const LS_CACHE = 'naum.cache.visits'
 function loadCache(): Store | null {
   try {
-    const o = JSON.parse(localStorage.getItem(LS_CACHE) || 'null')
+    const o = JSON.parse(getSecureRaw(LS_CACHE) || 'null')
     return o && Array.isArray(o.visits) ? o : null
   } catch {
     return null
   }
 }
 function saveCache(s: Store) {
-  try {
-    localStorage.setItem(LS_CACHE, JSON.stringify(s))
-  } catch {
-    /* ignore */
-  }
+  setSecureRaw(LS_CACHE, JSON.stringify(s))
 }
 
 function buildSeed(): Store {

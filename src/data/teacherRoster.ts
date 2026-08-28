@@ -2,7 +2,9 @@
 //  (학년·반) → 담임 이름·연락처 매핑. 담임 이름 표시 + 향후 문자(SMS) 발송용.
 //  연락처는 PII라 로컬에만 두고 서버로 보내지 않는다.
 import { decodeBuffer } from './localRoster'
+import { getSecureRaw, setSecureRaw, removeSecure, hasStored } from './secureStore'
 
+// 저장은 secureStore(학교 키 AES-GCM 암호화) 경유 — 연락처(PII)가 평문으로 남지 않는다.
 const LS_KEY = 'naum.teacherRoster'
 
 export interface TeacherRow {
@@ -14,7 +16,7 @@ export interface TeacherRow {
 
 function load(): TeacherRow[] {
   try {
-    const a = JSON.parse(localStorage.getItem(LS_KEY) || 'null')
+    const a = JSON.parse(getSecureRaw(LS_KEY) || 'null')
     if (Array.isArray(a)) return a as TeacherRow[]
   } catch {
     /* ignore */
@@ -31,25 +33,13 @@ export function teacherOf(grade: number, classNo: number): TeacherRow | undefine
 }
 
 export function saveTeacherRoster(list: TeacherRow[]) {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(list))
-  } catch {
-    /* ignore */
-  }
+  setSecureRaw(LS_KEY, JSON.stringify(list))
 }
 export function clearTeacherRoster() {
-  try {
-    localStorage.removeItem(LS_KEY)
-  } catch {
-    /* ignore */
-  }
+  removeSecure(LS_KEY)
 }
 export function isCustomTeacherRoster(): boolean {
-  try {
-    return !!localStorage.getItem(LS_KEY)
-  } catch {
-    return false
-  }
+  return hasStored(LS_KEY)
 }
 
 export interface TeacherParseResult {

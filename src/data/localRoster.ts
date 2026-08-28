@@ -5,12 +5,14 @@
 import type { Sex, Student } from '../types'
 import { roster as DEFAULT_ROSTER } from './roster'
 import { schoolId } from './school'
+import { getSecureRaw, setSecureRaw, removeSecure, hasStored } from './secureStore'
 
+// 저장은 secureStore(학교 키 AES-GCM 암호화) 경유 — localStorage에는 암호문만 남는다.
 const LS_KEY = 'naum.roster'
 
 function load(): Student[] {
   try {
-    const a = JSON.parse(localStorage.getItem(LS_KEY) || 'null')
+    const a = JSON.parse(getSecureRaw(LS_KEY) || 'null')
     if (Array.isArray(a) && a.length) return a as Student[]
   } catch {
     /* ignore */
@@ -19,27 +21,15 @@ function load(): Student[] {
 }
 
 export function saveRoster(list: Student[]) {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(list))
-  } catch {
-    /* ignore */
-  }
+  setSecureRaw(LS_KEY, JSON.stringify(list))
 }
 
 export function clearRoster() {
-  try {
-    localStorage.removeItem(LS_KEY)
-  } catch {
-    /* ignore */
-  }
+  removeSecure(LS_KEY)
 }
 
 export function isCustomRoster(): boolean {
-  try {
-    return !!localStorage.getItem(LS_KEY)
-  } catch {
-    return false
-  }
+  return hasStored(LS_KEY)
 }
 
 // 앱 시작 시 1회 확정되는 유효 명부 (업로드 적용은 새로고침으로 반영 — 로컬 스테이션이므로 적절)
