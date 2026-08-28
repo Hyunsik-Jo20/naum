@@ -46,6 +46,8 @@ a { color: inherit; text-decoration: none; }
   margin: 0 auto;
   padding: 24px 20px 64px;
 }
+/* 키오스크는 셸 폭 제한을 넓게, 상하 여백은 얇게 — 패널 확대·한 화면 수납(현장 피드백) */
+.app-shell.kiosk-shell { max-width: 1240px; padding: 12px 20px 10px; }
 
 .topbar {
   display: flex;
@@ -373,9 +375,9 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-  min-height: 188px; /* 저학년 터치 배려 — 1.5배 확대 */
-  padding: 30px 10px;
+  gap: 10px;
+  min-height: 150px; /* 상하 80% 축소·좌우 130% 확대(패널 폭) — 현장 피드백 */
+  padding: 18px 10px;
   border: 2px solid transparent;
   border-radius: 22px;
   background: #f5faf8;
@@ -437,12 +439,12 @@ a { color: inherit; text-decoration: none; }
 .id-btn.boy { background: #eef8fc; color: #316d83; border-color: #a9d5e2; }
 .id-btn.girl { background: #fff4f1; color: #9b5c56; border-color: #efc6bf; }
 .id-btn {
-  padding: 22px 10px;
-  min-height: 84px; /* 이름 버튼 1.5배 확대 */
+  padding: 28px 12px;
+  min-height: 110px; /* 이름 버튼 130% 확대 — 저학년 터치 배려 */
   border: 1px solid var(--border-2);
   border-radius: 17px;
   background: var(--surface);
-  font-size: 24px;
+  font-size: 31px;
   font-weight: 650;
   transition: transform .1s ease, box-shadow .1s ease;
 }
@@ -457,8 +459,8 @@ a { color: inherit; text-decoration: none; }
 /* 학반 선택 행렬 — 열=학년, 행=반 */
 .class-matrix {
   display: grid;
-  gap: 8px;
-  padding: 14px;
+  gap: 10px;
+  padding: 16px;
   border-radius: 20px;
   background: linear-gradient(145deg, rgba(239,248,244,.9), rgba(245,250,253,.9));
 }
@@ -470,12 +472,11 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-3);
 }
 .cm-head {
-
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 0;
-  font-size: 14px;
+  padding: 8px 0;
+  font-size: 20px;
   font-weight: 700;
   color: var(--kiosk-mint-dark);
 }
@@ -483,18 +484,18 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 19px;
+  font-size: 24px;
   font-weight: 700;
   color: var(--text-2);
 }
 .cm-cell {
-  min-height: 78px; /* 반 선택 버튼 1.5배 확대 */
-  padding: 20px 6px;
+  min-height: 120px; /* 반 선택 버튼 확대 — 저학년 터치 배려 */
+  padding: 30px 8px;
   border: 1px solid #95cabd;
-  border-radius: 17px;
+  border-radius: 20px;
   background: rgba(255,255,255,.88);
   color: var(--kiosk-mint-dark);
-  font-size: 22px;
+  font-size: 32px;
   font-weight: 750;
   cursor: pointer;
   box-shadow: 0 3px 10px rgba(68, 112, 102, .06);
@@ -512,6 +513,23 @@ a { color: inherit; text-decoration: none; }
   border-top: 1px dashed rgba(65, 126, 113, .24);
 }
 .kiosk-help-actions { gap: 12px; margin-top: 12px; }
+/* 증상 화면 — 하단 "다 골랐어요"까지 한 화면에 들어오도록 상단·여백 압축 */
+.kiosk-symptom .kiosk-card { padding: 20px 26px 22px; }
+.kiosk-symptom .kiosk-student-head { margin-bottom: 8px; padding-bottom: 8px; }
+.kiosk-symptom .kiosk-empathy {
+  grid-template-columns: 96px minmax(0, 1fr);
+  min-height: 72px;
+  margin: 0 0 8px;
+  padding-block: 4px;
+}
+.kiosk-symptom .kiosk-empathy img { width: 96px; height: 68px; }
+.kiosk-symptom .kiosk-empathy strong { margin-bottom: 2px; font-size: 14px; }
+.kiosk-symptom .kiosk-empathy span { font-size: 12px; }
+.kiosk-symptom .kiosk-eyebrow { margin-bottom: 3px; padding: 5px 10px; }
+.kiosk-symptom .kiosk-q { margin: 3px 0 4px; font-size: 26px; }
+.kiosk-symptom .kiosk-sub { margin-bottom: 12px; font-size: 15px; }
+.kiosk-symptom .kiosk-selection-bar { margin-top: 12px; padding-top: 10px; }
+.kiosk-symptom .kiosk-help-actions { margin-top: 8px; }
 .kiosk .avatar {
   width: 44px;
   height: 44px;
@@ -542,10 +560,10 @@ a { color: inherit; text-decoration: none; }
   .kiosk-card { padding: 22px 14px; }
   .kiosk-q { font-size: 26px; }
   .tile-grid { gap: 8px; }
-  .tile { min-height: 156px; padding: 22px 7px; font-size: 21px; }
+  .tile { min-height: 125px; padding: 14px 7px; font-size: 21px; }
   .tile i { font-size: 52px; }
   .class-matrix { gap: 5px; padding: 9px 6px; }
-  .cm-cell { min-height: 68px; font-size: 19px; }
+  .cm-cell { min-height: 100px; font-size: 24px; }
   .cm-head, .cm-rowhead { font-size: 12px; }
   .cm-corner { font-size: 9px; }
   .id-grid { grid-template-columns: repeat(2, 1fr); }
@@ -581,8 +599,8 @@ a { color: inherit; text-decoration: none; }
     gap: 12px;
   }
   .tile {
-    min-height: 168px;
-    padding: 28px 10px;
+    min-height: 134px;
+    padding: 16px 10px;
   }
   .id-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .class-matrix { gap: 7px; }
@@ -596,6 +614,10 @@ a { color: inherit; text-decoration: none; }
 /* 낮고 넓은 모니터에서는 모든 입력이 한 화면에 보이도록 세로 밀도를 줄임 */
 @media (orientation: landscape) and (min-width: 1000px) {
   .kiosk { max-width: 920px; }
+  /* 반·이름 선택 화면은 패널을 더 넓게 — 버튼 확대 체감(현장 피드백) */
+  .kiosk-welcome, .kiosk-roster { max-width: 1160px; }
+  /* 증상 화면은 타일 좌우 130% — 패널을 넓혀 타일 폭 확보 */
+  .kiosk-symptom { max-width: 1200px; }
 }
 @media (orientation: landscape) and (max-height: 820px) {
   .kiosk { min-height: calc(100svh - 48px); }
@@ -611,12 +633,11 @@ a { color: inherit; text-decoration: none; }
   .kiosk-sub { margin-bottom: 14px; font-size: 14px; }
   .kiosk-qr { margin-bottom: 14px; padding: 11px 16px; }
   .class-matrix { padding: 9px 12px; gap: 5px 7px; }
-  .cm-cell { min-height: 62px; padding-block: 13px; }
-  .id-btn { min-height: 68px; padding-block: 14px; }
+  /* 반·이름 버튼은 낮은 모니터에서도 축소하지 않음 — 확대 유지(현장 피드백) */
   .id-sex-head { margin: 9px 0 6px; }
   .tile-grid { gap: 8px 10px; }
-  .tile { min-height: 138px; padding: 18px 10px; gap: 9px; }
-  .tile i { font-size: 50px; }
+  .tile { min-height: 110px; padding: 10px 10px; gap: 7px; }
+  .tile i { font-size: 44px; }
   .kiosk-selection-bar { margin-top: 12px; padding-top: 10px; }
   .kiosk-help-actions { margin-top: 8px; }
   .kiosk-empathy {
@@ -633,7 +654,7 @@ a { color: inherit; text-decoration: none; }
 @media (orientation: portrait) and (max-width: 620px) {
   .kiosk-card { padding: 22px 14px 24px; }
   .id-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tile { min-height: 152px; padding: 22px 7px; }
+  .tile { min-height: 122px; padding: 13px 7px; }
   .class-matrix { gap: 5px; padding: 9px 6px; }
   .kiosk-empathy {
     grid-template-columns: 94px minmax(0, 1fr);

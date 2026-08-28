@@ -42,7 +42,7 @@ export default function App() {
     useNotices()
 
   return (
-    <div className={`app-shell${isWide ? ' wide' : ''}`}>
+    <div className={`app-shell${isWide ? ' wide' : ''}${isKiosk ? ' kiosk-shell' : ''}`}>
       {!isKiosk && !isLogin && (
         <div className="topbar">
           <Link to="/" className="logo">
