@@ -269,6 +269,22 @@ export default function NurseQueue() {
                 {requests.map((item) => {
                   const req = item.req!
                   const st = findByNo(req.grade, req.classNo, req.number)
+                  if (req.kind === '키오스크호출') {
+                    const ksyms = (req.symIds ?? []).map((id) => tileById(id)?.label).filter(Boolean).join(' · ')
+                    return (
+                      <div key={item.id} className="recv-item alert">
+                        <div className="recv-top">
+                          <span className="recv-from"><i className="ti ti-bell-ringing" aria-hidden="true" /> 학생 호출 · 키오스크</span>
+                          <span className="recv-time">{hhmm(item.ts)}</span>
+                        </div>
+                        <div className="recv-title">{req.grade}-{req.classNo} {req.number}번{st ? ` ${st.name}` : ''} — 키오스크 앞에서 기다려요</div>
+                        {ksyms && <div className="recv-body">{ksyms}</div>}
+                        <div className="row" style={{ gap: 6, marginTop: 6 }}>
+                          <button className="btn small primary" onClick={() => void dismissRequest(item)}>확인</button>
+                        </div>
+                      </div>
+                    )
+                  }
                   if (req.kind === '전학안내') {
                     return (
                       <div key={item.id} className="recv-item notice">

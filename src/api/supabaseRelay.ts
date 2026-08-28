@@ -137,7 +137,7 @@ export async function subscribeStudent(studentId: string, onChange: () => void):
 }
 
 // ── 교사 → 보건교사 (relay_nurse_inbox): 보건실 요청·전학 안내 ──
-export type NurseReqKind = '보건실요청' | '전학안내'
+export type NurseReqKind = '보건실요청' | '전학안내' | '키오스크호출'
 export interface NurseRequest {
   kind: NurseReqKind
   grade: number

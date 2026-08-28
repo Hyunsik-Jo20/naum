@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   classes,
@@ -10,6 +10,8 @@ import {
 import { useVisits } from '../store/visits'
 import { SUPABASE_ENABLED } from '../data/supabaseClient'
 import { hasSchool } from '../data/school'
+import { sendNurseRequest } from '../data/nurseRequest'
+import { listenOnce, matchSymptomTiles, type VoiceOutcome } from '../data/voiceSymptom'
 import type { Student } from '../types'
 
 type Step = 'id' | 'symptom' | 'done'
@@ -50,6 +52,11 @@ export default function Kiosk() {
     setSelected((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     )
+  }
+
+  // 음성 인식 결과 — 이미 고른 것 위에 추가(중복 제거)
+  function pickMany(ids: string[]) {
+    setSelected((prev) => [...new Set([...prev, ...ids])])
   }
 
   function confirmSymptoms() {
@@ -115,6 +122,7 @@ export default function Kiosk() {
           byQr={byQr}
           selected={selected}
           onToggle={toggle}
+          onPickMany={pickMany}
           onConfirm={confirmSymptoms}
         />
       )}
@@ -217,7 +225,7 @@ function ClassMatrix({ onPick }: { onPick: (c: string) => void }) {
   const classSet = new Set(classes)
 
   return (
-    <div className="class-matrix" style={{ gridTemplateColumns: `auto repeat(${grades.length}, 1fr)` }}>
+    <div className="class-matrix" style={{ gridTemplateColumns: `auto repeat(${grades.length}, minmax(0, 1fr))` }}>
       <div className="cm-corner">반＼학년</div>
       {grades.map((g) => (
         <div key={`h${g}`} className="cm-head">{g}학년</div>
@@ -239,19 +247,81 @@ function ClassMatrix({ onPick }: { onPick: (c: string) => void }) {
   )
 }
 
+type VoiceState =
+  | { s: 'idle' }
+  | { s: 'listening' }
+  | { s: 'matched'; text: string; labels: string }
+  | { s: 'nomatch'; text: string }
+  | { s: 'silent' }
+  | { s: 'denied' }
+  | { s: 'unsupported' }
+  | { s: 'error' }
+
 function SymptomStep({
   student,
   byQr,
   selected,
   onToggle,
+  onPickMany,
   onConfirm,
 }: {
   student: Student
   byQr: boolean
   selected: string[]
   onToggle: (id: string) => void
+  onPickMany: (ids: string[]) => void
   onConfirm: () => void
 }) {
+  const [voice, setVoice] = useState<VoiceState>({ s: 'idle' })
+  const [called, setCalled] = useState(false)
+  const abortRef = useRef<(() => void) | null>(null)
+
+  // 화면을 떠나면 듣던 것 중단
+  useEffect(() => () => abortRef.current?.(), [])
+
+  function startVoice() {
+    if (voice.s === 'listening') return
+    setVoice({ s: 'listening' })
+    abortRef.current = listenOnce((r: VoiceOutcome) => {
+      abortRef.current = null
+      if (r.kind === 'heard') {
+        const ids = matchSymptomTiles(r.text)
+        if (ids.length > 0) {
+          onPickMany(ids)
+          const labels = ids.map((id) => symptomTiles.find((t) => t.id === id)?.label).filter(Boolean).join(' · ')
+          setVoice({ s: 'matched', text: r.text, labels })
+        } else {
+          setVoice({ s: 'nomatch', text: r.text })
+        }
+      } else {
+        setVoice({ s: r.kind === 'silent' ? 'silent' : r.kind === 'denied' ? 'denied' : r.kind === 'unsupported' ? 'unsupported' : 'error' })
+      }
+    })
+  }
+
+  function callNurse() {
+    if (called) return
+    setCalled(true)
+    // 콘솔 "보건실 요청" 인박스로 전달(클라우드=암호화 릴레이, 로컬=탭 간 브로드캐스트)
+    void sendNurseRequest({
+      kind: '키오스크호출',
+      grade: student.grade,
+      classNo: student.classNo,
+      number: student.number,
+      symIds: selected,
+    }).catch(() => {})
+  }
+
+  const voiceMsg: string | null =
+    voice.s === 'listening' ? '듣고 있어요 — 어디가 아픈지 말해 보세요'
+    : voice.s === 'matched' ? `"${voice.text}" → ${voice.labels} 선택했어요`
+    : voice.s === 'nomatch' ? `"${voice.text}" — 아픈 곳을 못 찾았어요. 버튼을 직접 눌러 주세요`
+    : voice.s === 'silent' ? '목소리를 못 들었어요. 버튼을 누르고 다시 말해 보세요'
+    : voice.s === 'denied' ? '마이크가 막혀 있어요. 보건 선생님께 알려 주세요'
+    : voice.s === 'unsupported' ? '이 기기에서는 음성 입력을 쓸 수 없어요'
+    : voice.s === 'error' ? '잘 안 들렸어요. 한 번 더 눌러 보세요'
+    : null
+
   return (
     <div className="kiosk-card">
       <div className="row between kiosk-student-head">
@@ -320,20 +390,31 @@ function SymptomStep({
 
       <div className="row kiosk-help-actions">
         <button
-          className="btn ghost"
+          className={`btn ghost${voice.s === 'listening' ? ' listening' : ''}`}
           style={{ flex: 1, justifyContent: 'center' }}
-          onClick={() => alert('음성 입력은 다음 단계에서 연동됩니다. (로컬 처리)')}
+          onClick={startVoice}
+          disabled={voice.s === 'listening'}
         >
-          <i className="ti ti-microphone" aria-hidden="true" /> 말로 할래요
+          <i className="ti ti-microphone" aria-hidden="true" />
+          {voice.s === 'listening' ? '듣고 있어요…' : '말로 할래요'}
         </button>
         <button
           className="btn ghost"
           style={{ flex: 1, justifyContent: 'center' }}
-          onClick={() => alert('보건 선생님을 호출했어요.')}
+          onClick={callNurse}
+          disabled={called}
         >
-          <i className="ti ti-bell" aria-hidden="true" /> 선생님 도와주세요
+          <i className={`ti ${called ? 'ti-bell-check' : 'ti-bell'}`} aria-hidden="true" />
+          {called ? '선생님을 불렀어요 — 잠시만요' : '선생님 도와주세요'}
         </button>
       </div>
+
+      {voiceMsg && (
+        <p className={`kiosk-voice-note${voice.s === 'listening' ? ' live' : ''}`} role="status">
+          <i className={`ti ${voice.s === 'listening' ? 'ti-microphone' : voice.s === 'matched' ? 'ti-check' : 'ti-info-circle'}`} aria-hidden="true" />
+          {voiceMsg}
+        </p>
+      )}
     </div>
   )
 }
