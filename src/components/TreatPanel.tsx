@@ -18,6 +18,8 @@ import ItemPickerModal from './ItemPickerModal'
 import { loadMeds, saveMeds } from '../data/meds'
 import { loadSupplies, saveSupplies } from '../data/supplies'
 import { blockPii } from '../data/piiGuard'
+import { getSchool } from '../data/school'
+import { busanSchools } from '../data/busanSchools'
 import { teacherOf } from '../data/teacherRoster'
 import { useVisits } from '../store/visits'
 import type { Disease, Outcome, Visit } from '../types'
@@ -233,6 +235,62 @@ export default function TreatPanel({
   }
   function removePick(kind: string) {
     setTreatments((p) => p.filter((x) => x !== kind && !x.startsWith(`${kind} (`)))
+  }
+
+  // 병원 이송·귀가 인계서 — 병원/보호자에게 전달할 처치 확인서를 브라우저 인쇄(종이 또는 PDF 저장).
+  //  개인정보는 로컬(이 기기)에서만 조합되어 인쇄 — 클라우드를 거치지 않음.
+  function printHandoff() {
+    const sch = getSchool()
+    const tel = busanSchools.find((b) => b.id === sch.id)?.tel ?? ''
+    const sym = visit.symptomTileIds.map((t) => tileById(t)?.label).filter(Boolean).join(', ')
+    const dzList = diseases.filter((d) => d.name.trim())
+    const dz = dzList.map((d) => (d.isPrimary ? `${d.name}(주)` : d.name)).join(', ') || '미확정'
+    const tr = treatments.length ? treatments.join(', ') : '—'
+    const fmt = (ts?: number) =>
+      ts ? new Date(ts).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
+    const memoText = memo.trim()
+    const esc =
+      outcome === '병원 이송'
+        ? `<tr><th>이송 방법</th><td>${transport}${escort.length ? ` · 동행: ${escort.join(', ')}` : ''}</td></tr>`
+        : ''
+    const esc2 = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>보건실 처치 확인서</title>
+<style>
+  body { font-family: '맑은 고딕', sans-serif; margin: 28px; color: #1c1c1a; }
+  h1 { font-size: 20px; text-align: center; margin: 0 0 4px; }
+  .sub { text-align: center; color: #666; font-size: 12px; margin-bottom: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid #999; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { width: 110px; background: #f2f0ea; font-weight: 700; white-space: nowrap; }
+  .sign { margin-top: 26px; font-size: 13px; display: flex; justify-content: space-between; align-items: flex-end; }
+  .foot { margin-top: 14px; font-size: 11px; color: #777; }
+  @media print { body { margin: 12mm; } }
+</style></head><body>
+<h1>보건실 처치 확인서</h1>
+<div class="sub">${esc2(sch.name)} 보건실 · 발행 ${new Date().toLocaleString('ko-KR')}</div>
+<table>
+  <tr><th>학생</th><td>${esc2(student ? `${student.name} (${classLabel(student)} · ${student.number}번 · ${student.sex})` : `${visit.grade}학년 · ${visit.sex}`)}</td></tr>
+  <tr><th>보호자 연락처</th><td>${esc2(phone ?? '—')}</td></tr>
+  <tr><th>학생 호소 증상</th><td>${esc2(sym || '—')}</td></tr>
+  <tr><th>추정 병명</th><td>${esc2(dz)}</td></tr>
+  <tr><th>처치 내역</th><td>${esc2(tr)}</td></tr>
+  ${memoText ? `<tr><th>특이사항</th><td>${esc2(memoText)}</td></tr>` : ''}
+  <tr><th>조치 결과</th><td><b>${esc2(outcome)}</b></td></tr>
+  ${esc}
+  <tr><th>접수 시각</th><td>${fmt(visit.createdAt)}</td></tr>
+  <tr><th>처치 시각</th><td>${fmt(visit.treatedAt ?? Date.now())}</td></tr>
+</table>
+<div class="sign">
+  <span>${esc2(sch.name)}${tel ? ` · ☎ ${esc2(tel)}` : ''}</span>
+  <span>보건교사: ______________ (서명)</span>
+</div>
+<div class="foot">본 확인서는 학교 보건실의 응급처치 기록으로, 진단서가 아닙니다. 정확한 진단은 의료기관의 진료에 따릅니다.</div>
+<script>window.onload = function(){ setTimeout(function(){ window.print() }, 200) }</script>
+</body></html>`
+    const w = window.open('', '_blank', 'width=780,height=920')
+    if (!w) { alert('팝업이 차단되어 인계서를 열 수 없습니다. 브라우저 팝업 허용 후 다시 시도하세요.'); return }
+    w.document.write(html)
+    w.document.close()
   }
 
   function buildPatch(): Partial<Visit> {
@@ -519,16 +577,26 @@ export default function TreatPanel({
       )}
 
       {outcome === '귀가' && (
-        <label className="handoff" style={{ marginBottom: 12 }}>
-          <input type="checkbox" checked={handoff} onChange={(e) => setHandoff(e.target.checked)} />
-          보호자 연락·인계 확인
-        </label>
+        <div className="row between" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <label className="handoff" style={{ marginBottom: 0 }}>
+            <input type="checkbox" checked={handoff} onChange={(e) => setHandoff(e.target.checked)} />
+            보호자 연락·인계 확인
+          </label>
+          <button className="btn small" onClick={printHandoff} title="보호자·병원 전달용 처치 확인서 인쇄(PDF 저장 가능)">
+            <i className="ti ti-printer" aria-hidden="true" /> 인계서 출력
+          </button>
+        </div>
       )}
 
       {outcome === '병원 이송' && (
         <div className="escalate" style={{ marginBottom: 12 }}>
-          <div className="esc-title">
-            <i className="ti ti-ambulance" aria-hidden="true" /> 병원 이송 — 동행자와 방법을 확인하세요
+          <div className="row between" style={{ flexWrap: 'wrap', gap: 8 }}>
+            <div className="esc-title">
+              <i className="ti ti-ambulance" aria-hidden="true" /> 병원 이송 — 동행자와 방법을 확인하세요
+            </div>
+            <button className="btn small" onClick={printHandoff} title="병원 전달용 처치 확인서 인쇄(PDF 저장 가능)">
+              <i className="ti ti-printer" aria-hidden="true" /> 인계서 출력
+            </button>
           </div>
           <div className="esc-sub">동행자 (여러 명 선택)</div>
           <div className="chips" style={{ marginBottom: 12 }}>

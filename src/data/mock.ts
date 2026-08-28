@@ -45,8 +45,8 @@ export const DISEASE_CATEGORIES: DiseaseCategory[] = [
   '기타',
 ]
 
-/** 학생 화면 타일 = 흔한 8개 + "잘 모르겠어요" (설계 7.4) */
-export const symptomTiles: SymptomTile[] = [
+/** 기본 학생 화면 타일 = 흔한 8개 + "잘 모르겠어요" (설계 7.4) */
+export const DEFAULT_SYMPTOM_TILES: SymptomTile[] = [
   { id: 'hurt', label: '다쳤어요', icon: 'ti-bandage', category: '피부피하계', disease: '찰과상' },
   { id: 'tummy', label: '배 아파요', icon: 'ti-mood-sick', category: '소화기계', disease: '복통' },
   { id: 'head', label: '머리 아파요', icon: 'ti-mood-sad', category: '정신신경계', disease: '두통' },
@@ -57,6 +57,25 @@ export const symptomTiles: SymptomTile[] = [
   { id: 'eye', label: '눈이 아파요', icon: 'ti-eye', category: '안과계', disease: '충혈' },
   { id: 'unknown', label: '잘 모르겠어요', icon: 'ti-help-circle', category: '기타', disease: '' },
 ]
+
+/** 유효 증상 타일 — 보건교사가 편집한 목록(localStorage 'naum.symptoms')이 있으면 그것, 없으면 기본.
+ *  명부(localRoster)와 같은 패턴: 앱 시작 시 1회 확정, 편집 적용은 새로고침으로 반영. */
+function loadSymptomTiles(): SymptomTile[] {
+  try {
+    const a = JSON.parse(localStorage.getItem('naum.symptoms') || 'null')
+    if (Array.isArray(a) && a.length) {
+      const ok = a.filter(
+        (t) => t && typeof t.id === 'string' && typeof t.label === 'string' && t.label.trim() && typeof t.category === 'string',
+      ) as SymptomTile[]
+      if (ok.length) return ok.map((t) => ({ ...t, icon: t.icon || 'ti-medical-cross', disease: t.disease ?? '' }))
+    }
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_SYMPTOM_TILES
+}
+
+export const symptomTiles: SymptomTile[] = loadSymptomTiles()
 
 export function tileById(id: string): SymptomTile | undefined {
   return symptomTiles.find((t) => t.id === id)

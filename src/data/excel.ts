@@ -44,7 +44,7 @@ export function downloadExcel(filename: string, sheets: SheetSpec[]) {
 
 // ── 위치/병합/스타일 기반 API (양식 재현용) ──
 export type StyleId =
-  | 'title' | 'box' | 'boxStamp' | 'sec' | 'secText' | 'hdr' | 'cell' | 'cellL' | 'cellShrink'
+  | 'title' | 'box' | 'boxStamp' | 'sec' | 'secText' | 'hdr' | 'cell' | 'cellL' | 'cellShrink' | 'cellLShrink'
   | 'cat' | 'num' | 'vlabel' | 'date'
 
 export interface XCell {
@@ -93,6 +93,8 @@ function styleBlock(): string {
     `<Style ss:ID="cell">${BORDER}<Alignment ${C} ss:WrapText="1"/></Style>` +
     `<Style ss:ID="cellL">${BORDER}<Alignment ss:Horizontal="Left" ss:Vertical="Center" ss:WrapText="1"/></Style>` +
     `<Style ss:ID="cellShrink">${BORDER}<Alignment ${C} ss:ShrinkToFit="1"/></Style>` +
+    // 왼쪽 정렬 + 셀 폭에 맞춰 글자 자동 축소 — 긴 "증상·처치·결과" 텍스트가 칸을 벗어나지 않게
+    `<Style ss:ID="cellLShrink">${BORDER}<Alignment ss:Horizontal="Left" ss:Vertical="Center" ss:ShrinkToFit="1"/></Style>` +
     `<Style ss:ID="cat">${BORDER}<Alignment ${C} ss:WrapText="1"/><Font ss:FontName="맑은 고딕" ss:Bold="1" ss:Size="8"/><Interior ss:Color="#F1EFE8" ss:Pattern="Solid"/></Style>` +
     `<Style ss:ID="num">${BORDER}<Alignment ${C}/></Style>` +
     `<Style ss:ID="vlabel">${BORDER}<Alignment ${C} ss:WrapText="1"/><Font ss:FontName="맑은 고딕" ss:Bold="1" ss:Size="9"/><Interior ss:Color="#EFEDE6" ss:Pattern="Solid"/></Style>` +

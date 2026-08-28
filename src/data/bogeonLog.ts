@@ -185,7 +185,7 @@ function dayBlockCells(blockStart: number, date: Date, entries: LogEntry[], stat
     put(row, { col: C(F.NAME), value: e?.name ?? '', across: 3, style: 'cell' })
     put(row, { col: C(F.SEX), value: e?.sex ?? '', style: 'cell' })
     put(row, { col: C(F.DIAG), value: e ? e.diagNames.join(', ') : '', across: 3, style: 'cellShrink' })
-    put(row, { col: C(F.TREAT), value: e ? e.treat : '', across: 17, style: 'cellL' })
+    put(row, { col: C(F.TREAT), value: e ? e.treat : '', across: 17, style: 'cellLShrink' }) // 칸 폭에 맞춰 글자 축소
   }
 
   // 행38~44: 통계

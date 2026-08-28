@@ -10,6 +10,7 @@ import ObserveResolveModal from '../components/ObserveResolveModal'
 import ObservePickerModal from '../components/ObservePickerModal'
 import { loadNotifyTargets, saveNotifyTargets } from '../data/notifyTargets'
 import ParentNotifyModal from '../components/ParentNotifyModal'
+import SymptomEditModal from '../components/SymptomEditModal'
 import { flushDue, parentNotifySummary } from '../data/parentNotify'
 import { loadRequests, subscribeRequests, removeRequest, type NurseInboxItem } from '../data/nurseRequest'
 import { roster, saveRoster } from '../data/localRoster'
@@ -45,6 +46,7 @@ export default function NurseQueue() {
   const [requests, setRequests] = useState<NurseInboxItem[]>([]) // 교사 보건실 요청·전학 안내
   const [notifyT, setNotifyT] = useState(() => loadNotifyTargets())
   const [showParentNotify, setShowParentNotify] = useState(false)
+  const [showSymptomEdit, setShowSymptomEdit] = useState(false)
   const [parentSummary, setParentSummary] = useState(() => parentNotifySummary())
   const [, setTick] = useState(0) // 관찰 남은시간 갱신·종료 감지용 주기 리렌더
 
@@ -220,6 +222,9 @@ export default function NurseQueue() {
             </div>
             <button className="btn ghost small" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowToken(true)} title="교사·학부모 로그인 토큰 발급">
               <i className="ti ti-key" aria-hidden="true" /> 로그인 토큰 발급
+            </button>
+            <button className="btn ghost small" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowSymptomEdit(true)} title="키오스크·접수의 증상 버튼 목록 편집">
+              <i className="ti ti-list-details" aria-hidden="true" /> 증상 목록 편집
             </button>
             <div className="notify-targets" title="접수·처치 알림을 누구에게 보낼지 선택">
               <span className="nt-label"><i className="ti ti-bell" aria-hidden="true" /> 알림 대상</span>
@@ -455,6 +460,7 @@ export default function NurseQueue() {
       {showAdd && <AddVisitModal onClose={() => setShowAdd(false)} onSubmit={handleAdd} />}
       {showToken && <LoginTokenModal onClose={() => setShowToken(false)} />}
       {showParentNotify && <ParentNotifyModal onClose={() => { setShowParentNotify(false); setParentSummary(parentNotifySummary()) }} />}
+      {showSymptomEdit && <SymptomEditModal onClose={() => setShowSymptomEdit(false)} />}
       {resolveId && (
         <ObserveResolveModal
           name={nameOf(visits.find((v) => v.id === resolveId) ?? ({} as Visit))}
