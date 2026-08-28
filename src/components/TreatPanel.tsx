@@ -17,6 +17,7 @@ import BodyMapModal from './BodyMapModal'
 import ItemPickerModal from './ItemPickerModal'
 import { loadMeds, saveMeds } from '../data/meds'
 import { loadSupplies, saveSupplies } from '../data/supplies'
+import { blockPii } from '../data/piiGuard'
 import { teacherOf } from '../data/teacherRoster'
 import { useVisits } from '../store/visits'
 import type { Disease, Outcome, Visit } from '../types'
@@ -112,6 +113,7 @@ export default function TreatPanel({
   function confirmAddTreat() {
     const t = newTreat.trim()
     if (!t) return
+    if (blockPii(t)) return // 처치명은 클라우드로 감 — 개인정보 차단
     if (!treatOrder.includes(t)) {
       const next = [...treatOrder]
       const etcIdx = next.indexOf('기타')
@@ -180,6 +182,7 @@ export default function TreatPanel({
   function addMemoAsTreat() {
     const t = memo.trim()
     if (!t) return
+    if (blockPii(t)) return // 기타 입력은 클라우드로 감 — 개인정보 차단
     if (!treatments.includes(t)) setTreatments((p) => [...p, t])
     setMemo('')
   }
@@ -255,10 +258,12 @@ export default function TreatPanel({
   }
 
   function complete() {
+    if (blockPii(memo)) return // 기타란에 남은 내용도 완료 시 처치로 저장됨 — 개인정보 차단
     completeVisit(visit.id, buildPatch())
     onDone(visit.id, false)
   }
   function saveFollowUp() {
+    if (blockPii(memo)) return
     updateVisit(visit.id, buildPatch())
     onDone(visit.id, true)
   }

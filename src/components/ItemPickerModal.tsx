@@ -2,6 +2,7 @@
 //  선택 결과는 "투약 (타이레놀, 지사제)"처럼 "<처치> (항목…)" 형태로 저장(부위 처치와 동일 파싱).
 //  목록은 load/save(각 항목의 localStorage 모듈)로 이 기기에 저장.
 import { useState } from 'react'
+import { blockPii } from '../data/piiGuard'
 
 export default function ItemPickerModal({
   title,
@@ -39,6 +40,7 @@ export default function ItemPickerModal({
   function addItem() {
     const m = newItem.trim()
     if (!m) return
+    if (blockPii(m)) return // 선택 항목은 처치 문자열로 클라우드에 감 — 개인정보 차단
     if (!items.includes(m)) {
       const next = [...items, m]
       setItems(next)
