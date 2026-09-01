@@ -1514,6 +1514,28 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
 .bodymap.tone-danger .bm-zone.on { fill: var(--danger); stroke: var(--danger); }
 .bodymap.tone-info .bm-zone.on { fill: var(--info); stroke: var(--info); }
 .bm-selected { margin-top: 10px; font-size: 14px; color: var(--text-1); text-align: center; }
+/* 손가락 상세 선택 — 어느 손가락인지 기록(현장 피드백) */
+.bm-fingers { background: var(--surface-2, var(--bg-2)); border-radius: 12px; padding: 14px; }
+.bm-finger-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.bm-finger {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 4px 14px;
+  border: 1.5px solid var(--border-2);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 15px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: border-color .1s, background .1s;
+}
+.bm-finger i { font-size: 26px; }
+.bm-fingers.tone-danger .bm-finger.on { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
+.bm-fingers.tone-info .bm-finger.on { border-color: var(--info); background: var(--info-bg); color: var(--info); }
+.bm-fingers .btn.active { border-color: var(--info); color: var(--info); }
 /* 관찰 종료 결과 선택 버튼 */
 .obs-resolve { display: flex; flex-direction: column; gap: 8px; }
 .obs-resolve-btn {

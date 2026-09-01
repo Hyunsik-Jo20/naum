@@ -237,6 +237,12 @@ export default function TreatPanel({
     setTreatments((p) => p.filter((x) => x !== kind && !x.startsWith(`${kind} (`)))
   }
 
+  // 기타·직접 입력으로 저장된 처치 — 칩 격자에 없는 자유 텍스트 항목도 화면에 보이게.
+  //  (사후 보완에서 저장 내용이 안 보여 같은 내용을 다시 입력하게 되는 문제 방지)
+  const extraTreats = treatments.filter(
+    (x) => !treatOrder.includes(x) && !treatOrder.some((t) => x.startsWith(`${t} (`)) && !x.startsWith(TEMP_LABEL),
+  )
+
   // 병원 이송·귀가 인계서 — 병원/보호자에게 전달할 처치 확인서를 브라우저 인쇄(종이 또는 PDF 저장).
   //  개인정보는 로컬(이 기기)에서만 조합되어 인쇄 — 클라우드를 거치지 않음.
   function printHandoff() {
@@ -555,8 +561,27 @@ export default function TreatPanel({
         placeholder="기타 — 추가 처치·특이사항 직접 입력 후 Enter (예: 구토 없음, 아침 식사 함)"
         onChange={(e) => setMemo(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && addMemoAsTreat()}
-        style={{ marginBottom: 12 }}
+        style={{ marginBottom: extraTreats.length ? 8 : 12 }}
       />
+      {extraTreats.length > 0 && (
+        <div className="ai-treats" style={{ marginBottom: 12 }}>
+          <span className="muted-inline">
+            <i className="ti ti-pencil" aria-hidden="true" /> 기타·직접 입력 저장 내용 — 누르면 삭제
+          </span>
+          <div className="chips" style={{ marginTop: 6 }}>
+            {extraTreats.map((t) => (
+              <button
+                key={t}
+                className="chip on"
+                onClick={() => setTreatments((p) => p.filter((x) => x !== t))}
+                title="이 항목을 기록에서 제거"
+              >
+                {t} <i className="ti ti-x" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="sec-label" style={{ marginBottom: 10 }}>
         결과 <span className="muted-inline">· 기본 교실 복귀 (안 누르면 자동)</span>

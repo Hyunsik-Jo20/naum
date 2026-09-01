@@ -32,6 +32,11 @@ const ZONES: Zone[] = [
   { id: '왼발', x: 124, y: 322, w: 30, h: 20, rx: 8 },
 ]
 
+// 손가락 상세 — "어느 손가락인지"가 처치 기록에 중요(현장 피드백).
+//  손가락 존 터치 → 엄지~새끼 선택 화면. "오른손 엄지"처럼 저장(지혈·밴드·소독 공용).
+const FINGERS = ['엄지', '검지', '중지', '약지', '새끼'] as const
+type FingerSide = '오른' | '왼'
+
 export default function BodyMapModal({
   kind,
   initialParts,
@@ -46,8 +51,15 @@ export default function BodyMapModal({
   onClose: () => void
 }) {
   const [sel, setSel] = useState<string[]>(initialParts)
+  const [fingerSide, setFingerSide] = useState<FingerSide | null>(null)
   const tone = kind.includes('지혈') ? 'danger' : 'info' // 지혈=빨강, 밴드·소독=파랑
   const toggle = (id: string) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
+  // 손가락 존은 선택이 아니라 상세 화면으로 진입. 개별 손가락(또는 구형 "○손가락")이 선택돼 있으면 켜짐 표시.
+  const fingerOn = (side: FingerSide) => sel.some((s) => s === `${side}손가락` || s.startsWith(`${side}손 `))
+  const zoneClick = (id: string) => {
+    if (id === '오른손가락' || id === '왼손가락') setFingerSide(id.startsWith('오른') ? '오른' : '왼')
+    else toggle(id)
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -59,23 +71,60 @@ export default function BodyMapModal({
           <button className="x" onClick={onClose} aria-label="닫기"><i className="ti ti-x" aria-hidden="true" /></button>
         </div>
         <p className="muted" style={{ margin: '0 0 8px', fontSize: 13, lineHeight: 1.6 }}>
-          <b>{kind}</b> 처치한 부위를 터치하세요. 여러 곳 선택할 수 있습니다. <span className="muted-inline">(좌·우는 학생 기준)</span>
+          {fingerSide ? (
+            <><b>{fingerSide}손</b> — 어느 손가락인지 누르세요. 여러 개 선택할 수 있습니다.</>
+          ) : (
+            <><b>{kind}</b> 처치한 부위를 터치하세요. 여러 곳 선택할 수 있습니다. <span className="muted-inline">(좌·우는 학생 기준)</span></>
+          )}
         </p>
 
+        {fingerSide ? (
+          <div className={`bm-fingers tone-${tone}`}>
+            <div className="bm-finger-grid">
+              {FINGERS.map((f) => {
+                const id = `${fingerSide}손 ${f}`
+                const on = sel.includes(id)
+                return (
+                  <button key={f} className={`bm-finger ${on ? 'on' : ''}`} onClick={() => toggle(id)} aria-pressed={on}>
+                    <i className="ti ti-hand-finger" aria-hidden="true" />
+                    {f}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="row" style={{ gap: 8, marginTop: 10 }}>
+              <button
+                className={`btn ghost small ${sel.includes(`${fingerSide}손가락`) ? 'active' : ''}`}
+                onClick={() => toggle(`${fingerSide}손가락`)}
+                title="어느 손가락인지 특정하지 않고 기록"
+              >
+                손가락 전체(미상)
+              </button>
+              <button className="btn small" style={{ marginLeft: 'auto' }} onClick={() => setFingerSide(null)}>
+                <i className="ti ti-arrow-left" aria-hidden="true" /> 몸 전체로
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className={`bodymap tone-${tone}`}>
           <svg viewBox="0 0 240 360" width="100%" style={{ maxHeight: '46vh' }} role="img" aria-label="인체도 앞면">
-            {ZONES.map((z) => (
-              <rect
-                key={z.id}
-                x={z.x} y={z.y} width={z.w} height={z.h} rx={z.rx}
-                className={`bm-zone ${sel.includes(z.id) ? 'on' : ''}`}
-                onClick={() => toggle(z.id)}
-              >
-                <title>{z.id}</title>
-              </rect>
-            ))}
+            {ZONES.map((z) => {
+              const isFinger = z.id === '오른손가락' || z.id === '왼손가락'
+              const on = isFinger ? fingerOn(z.id.startsWith('오른') ? '오른' : '왼') : sel.includes(z.id)
+              return (
+                <rect
+                  key={z.id}
+                  x={z.x} y={z.y} width={z.w} height={z.h} rx={z.rx}
+                  className={`bm-zone ${on ? 'on' : ''}`}
+                  onClick={() => zoneClick(z.id)}
+                >
+                  <title>{isFinger ? `${z.id} — 눌러서 어느 손가락인지 선택` : z.id}</title>
+                </rect>
+              )
+            })}
           </svg>
         </div>
+        )}
 
         <div className="bm-selected">
           선택: {sel.length ? <b>{sel.join(', ')}</b> : <span className="muted-inline">없음(부위 미지정으로 기록)</span>}
