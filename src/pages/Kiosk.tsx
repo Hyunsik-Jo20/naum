@@ -16,9 +16,28 @@ import type { Student } from '../types'
 
 type Step = 'id' | 'symptom' | 'done'
 
+// 키오스크 화면 배율 — 태블릿에는 브라우저 확대/축소가 없어 앱에서 직접 조절(기기별 저장).
+const ZOOM_LS = 'naum.kiosk.zoom'
+function loadZoom(): number {
+  try {
+    const z = Number(localStorage.getItem(ZOOM_LS))
+    if (z >= 0.6 && z <= 1.6) return z
+  } catch { /* ignore */ }
+  return 1
+}
+
 export default function Kiosk() {
   const { addVisit } = useVisits()
   const [step, setStep] = useState<Step>('id')
+  const [zoom, setZoom] = useState<number>(loadZoom)
+
+  function adjustZoom(delta: number) {
+    setZoom((z) => {
+      const next = Math.round(Math.min(1.6, Math.max(0.6, z + delta)) * 10) / 10
+      try { localStorage.setItem(ZOOM_LS, String(next)) } catch { /* ignore */ }
+      return next
+    })
+  }
   const [student, setStudent] = useState<Student | null>(null)
   const [pickedClass, setPickedClass] = useState<string | null>(null)
   const [selected, setSelected] = useState<string[]>([])
@@ -67,7 +86,7 @@ export default function Kiosk() {
   }
 
   return (
-    <div className={`kiosk kiosk-${visualStep}`}>
+    <div className={`kiosk kiosk-${visualStep}`} style={{ zoom }}>
       <div className="kiosk-topbar">
         <Link to="/" className="btn ghost kiosk-exit">
           <i className="ti ti-arrow-left" aria-hidden="true" /> 나가기
@@ -81,9 +100,20 @@ export default function Kiosk() {
             <small>천천히 골라도 괜찮아요</small>
           </span>
         </div>
-        <span className="kiosk-calm-tag">
-          <i className="ti ti-sparkles" aria-hidden="true" /> 편안하게 알려 주세요
-        </span>
+        <div className="kiosk-topbar-right">
+          <div className="kiosk-zoom" aria-label="화면 크기 조절">
+            <button onClick={() => adjustZoom(-0.1)} aria-label="화면 축소" disabled={zoom <= 0.6}>
+              <i className="ti ti-minus" aria-hidden="true" />
+            </button>
+            <span>{Math.round(zoom * 100)}%</span>
+            <button onClick={() => adjustZoom(0.1)} aria-label="화면 확대" disabled={zoom >= 1.6}>
+              <i className="ti ti-plus" aria-hidden="true" />
+            </button>
+          </div>
+          <span className="kiosk-calm-tag">
+            <i className="ti ti-sparkles" aria-hidden="true" /> 편안하게 알려 주세요
+          </span>
+        </div>
       </div>
 
       {/* 멀티테넌트: 이 기기에 학교가 아직 바인딩되지 않음(보건교사 로그인 1회 필요) — 접수는 막지 않되 데모로 기록됨을 안내 */}

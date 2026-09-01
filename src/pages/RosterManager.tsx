@@ -129,6 +129,8 @@ export default function RosterManager() {
 
   const pvClasses = preview ? new Set(preview.map((s) => `${s.grade}-${s.classNo}`)).size : 0
   const pvWithPhone = preview ? preview.filter((s) => s.guardianPhone).length : 0
+  const pvBoys = preview ? preview.filter((s) => s.sex === '남').length : 0
+  const pvGirls = preview ? preview.filter((s) => s.sex === '여').length : 0
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
@@ -203,7 +205,10 @@ export default function RosterManager() {
             <button className="btn" onClick={apply}><i className="ti ti-check" aria-hidden="true" /> 이 명부 적용</button>
           </div>
           <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-            학급 {pvClasses}개 · 보호자 연락처 {pvWithPhone}/{preview.length}명
+            학급 {pvClasses}개 · 남 {pvBoys}명 · 여 {pvGirls}명 · 보호자 연락처 {pvWithPhone}/{preview.length}명
+            {pvGirls === 0 && pvBoys > 0 && (
+              <span style={{ color: 'var(--danger)' }}> — 여학생이 0명입니다. 파일의 성별 열(남/여)을 확인하세요.</span>
+            )}
           </div>
           <div className="report-table-wrap">
             <table className="report-table">

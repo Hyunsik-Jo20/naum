@@ -364,6 +364,13 @@ export default function TreatPanel({
           </div>
         </div>
         <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+          <button
+            className="btn ghost small"
+            title="이 방문의 처치 확인서를 인쇄합니다 (종이 또는 PDF 저장)"
+            onClick={printHandoff}
+          >
+            <i className="ti ti-printer" aria-hidden="true" /> 기록 출력
+          </button>
           {isDone ? (
             <span className="pill success">
               <i className="ti ti-check" aria-hidden="true" /> 종료됨

@@ -52,22 +52,69 @@ export interface ParseResult {
   error?: string
 }
 
+/** 성별 텍스트 해석 — 남/여, 남자/여자, M/F, male/female, boy/girl. 못 읽으면 null. */
+function parseSexText(raw: string): Sex | null {
+  const v = (raw ?? '').toString().trim().toLowerCase()
+  if (!v) return null
+  if (v.includes('여') || v.startsWith('f') || v.startsWith('w') || v.includes('girl')) return '여'
+  if (v.includes('남') || v.startsWith('m') || v.includes('boy')) return '남'
+  return null
+}
+/** 성별 값 해석(지정된 성별 열 전용) — 텍스트 + NEIS식 숫자 코드(1=남, 2=여). */
+function parseSexValue(raw: string): Sex | null {
+  const t = parseSexText(raw)
+  if (t) return t
+  const v = (raw ?? '').toString().trim()
+  if (v === '1') return '남'
+  if (v === '2') return '여'
+  return null
+}
+
 /** 2차원 셀 배열(머리글 포함) → 학생 명부. CSV·엑셀 공용. */
 export function parseRosterRows(rows: string[][]): ParseResult {
   const cleaned = rows.map((r) => r.map((c) => (c ?? '').toString().trim())).filter((r) => r.some((c) => c))
   if (cleaned.length < 2) return { students: [], error: '데이터가 없습니다. (머리글 + 1행 이상 필요)' }
   const header = cleaned[0]
-  const find = (...keys: string[]) => header.findIndex((h) => keys.some((k) => h.includes(k)))
+  // 머리글 정규화 — "성 별", "성별(남/여)", "남/여" 같은 변형도 인식
+  const norm = (s: string) => s.replace(/[\s()[\]/·.\-_]+/g, '').toLowerCase()
+  const find = (...keys: string[]) =>
+    header.findIndex((h) => {
+      const n = norm(h)
+      return keys.some((k) => n.includes(k))
+    })
   const col = {
     grade: find('학년', 'grade'),
     cls: find('반', '학급', 'class'),
     no: find('번호', 'number'),
     name: find('이름', '성명', 'name'),
-    sex: find('성별', 'sex'),
+    sex: find('성별', 'sex', '남녀', '남여'),
     phone: find('보호자', '연락처', '전화', 'phone'),
   }
   if (col.grade < 0 || col.cls < 0 || col.name < 0)
     return { students: [], error: '필수 열(학년·반·이름)을 찾지 못했습니다. 머리글을 확인하세요.' }
+
+  // 성별 열을 머리글로 못 찾으면 값으로 탐지 — 비어있지 않은 값의 90% 이상이
+  //  남/여류 텍스트인 열(숫자 1/2는 학년·반 오탐 위험이 있어 탐지에선 제외).
+  if (col.sex < 0) {
+    const used = new Set([col.grade, col.cls, col.no, col.name, col.phone])
+    const body = cleaned.slice(1)
+    const width = Math.max(header.length, ...body.map((r) => r.length))
+    for (let j = 0; j < width; j++) {
+      if (used.has(j)) continue
+      let hit = 0
+      let tot = 0
+      for (const r of body) {
+        const v = (r[j] ?? '').trim()
+        if (!v) continue
+        tot++
+        if (parseSexText(v)) hit++
+      }
+      if (tot > 0 && hit / tot >= 0.9) {
+        col.sex = j
+        break
+      }
+    }
+  }
 
   const students: Student[] = []
   let seq = 0
@@ -80,7 +127,7 @@ export function parseRosterRows(rows: string[][]): ParseResult {
     seq += 1
     const number = col.no >= 0 && c[col.no] ? Number(c[col.no]) || seq : seq
     const sexRaw = col.sex >= 0 ? c[col.sex] ?? '' : ''
-    const sex: Sex = /여|f/i.test(sexRaw) ? '여' : '남'
+    const sex: Sex = parseSexValue(sexRaw) ?? '남'
     const phone = col.phone >= 0 ? c[col.phone] : ''
     students.push({
       id: `u_${grade}_${classNo}_${number}_${i}`,

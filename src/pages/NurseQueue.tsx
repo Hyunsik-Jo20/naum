@@ -438,12 +438,19 @@ export default function NurseQueue() {
                 const remainMin = observing ? Math.ceil((v.observeUntil! - Date.now()) / 60000) : 0
                 const ended = observing && remainMin <= 0
                 return (
-                  <button
+                  <div
                     key={v.id}
-                    className={`visit-card done ${ended ? 'observe-done' : ''} ${active?.id === v.id ? 'editing' : ''}`}
+                    className={`visit-card done has-del ${ended ? 'observe-done' : ''} ${active?.id === v.id ? 'editing' : ''}`}
                     onClick={() => (ended ? setResolveId(v.id) : setActiveId(v.id))}
                     title={ended ? '관찰 종료 · 결과 선택 (복귀/귀가/병원/연장)' : observing ? '관찰 중' : '사후 처치 추가·수정'}
                   >
+                    <button
+                      className="vc-del"
+                      title="기록 삭제 (잘못 접수한 경우 등)"
+                      onClick={(e) => { e.stopPropagation(); removeVisit(v.id, nameOf(v)) }}
+                    >
+                      <i className="ti ti-x" aria-hidden="true" />
+                    </button>
                     <div className="vc-name">
                       {nameOf(v)} <span className="vc-class">{clsOf(v)}</span>
                     </div>
@@ -461,7 +468,7 @@ export default function NurseQueue() {
                         {v.outcome ?? '교실 복귀'} · 사후 보완 <i className="ti ti-pencil" aria-hidden="true" />
                       </div>
                     )}
-                  </button>
+                  </div>
                 )
               })
             )}
