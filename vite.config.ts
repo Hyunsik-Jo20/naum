@@ -41,6 +41,7 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,svg,woff2,woff,ttf}'],
+          importScripts: ['push-sw.js'], // 접수 도착 Web Push 수신·클릭 핸들러
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/api\//],
           runtimeCaching: [

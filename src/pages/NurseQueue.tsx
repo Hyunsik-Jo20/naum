@@ -19,7 +19,7 @@ import { deriveAlerts } from '../data/disasters'
 import { useOfficialAlerts } from '../data/useOfficialAlerts'
 import { SCHOOL } from '../data/location'
 import { setBadge, clearBadge } from '../data/appBadge'
-import { pushNotify } from '../push'
+import { pushNotify, remotePushSupported, remotePushActive, subscribeRemotePush, unsubscribeRemotePush } from '../push'
 import type { Student, Visit } from '../types'
 
 function hhmm(ts: number): string {
@@ -140,6 +140,32 @@ export default function NurseQueue() {
   const waiting = todays.filter((v) => v.status === 'waiting')
   const treating = todays.filter((v) => v.status === 'treating')
   const done = todays.filter((v) => v.status === 'done')
+
+  // 접수 도착 폰 푸시 — 이 기기(폰/PC)의 구독 상태와 토글.
+  const [remotePush, setRemotePush] = useState(false)
+  useEffect(() => {
+    void remotePushActive().then(setRemotePush)
+  }, [])
+  async function toggleRemotePush() {
+    if (remotePush) {
+      await unsubscribeRemotePush()
+      setRemotePush(false)
+      return
+    }
+    const r = await subscribeRemotePush()
+    if (r === 'ok') { setRemotePush(true); return }
+    alert(
+      r === 'denied'
+        ? '알림 권한이 거부되어 있습니다. 브라우저 설정(주소창 자물쇠 → 알림)에서 허용 후 다시 시도하세요.'
+        : r === 'unsupported'
+          ? '이 브라우저는 푸시 알림을 지원하지 않습니다. (아이폰은 홈 화면에 추가한 앱에서만 가능)'
+          : r === 'unconfigured'
+            ? '서버에 푸시 키(VAPID)가 아직 설정되지 않았습니다. 관리 문서의 푸시 설정을 완료하세요.'
+            : r === 'login_required'
+              ? '보건교사 로그인 상태에서만 등록할 수 있습니다.'
+              : '푸시 등록에 실패했습니다. 잠시 후 다시 시도하세요.',
+    )
+  }
 
   // 실행 아이콘 배지(설치형 PWA) — 대기 학생 수를 앱 아이콘에 숫자로 표시.
   //  보건교사가 자리를 비워 콘솔이 최소화/백그라운드여도, 키오스크 접수가 Realtime으로
@@ -266,6 +292,17 @@ export default function NurseQueue() {
             >
               <i className="ti ti-device-tablet" aria-hidden="true" /> 학생 키오스크 새 탭으로 열기
             </a>
+            {remotePushSupported() && (
+              <button
+                className={`btn small ${remotePush ? '' : 'ghost'}`}
+                style={{ width: '100%', justifyContent: 'center', marginTop: 6 }}
+                onClick={() => void toggleRemotePush()}
+                title="접수가 도착하면 이 기기로 푸시 알림을 보냅니다. 폰에서 쓰려면 폰에서 로그인 후 이 버튼을 누르세요(기기별 설정)."
+              >
+                <i className={`ti ${remotePush ? 'ti-bell-check' : 'ti-bell-plus'}`} aria-hidden="true" />
+                {remotePush ? '이 기기 접수 알림 켜짐 — 누르면 끄기' : '이 기기에서 접수 푸시 알림 받기'}
+              </button>
+            )}
           </div>
 
           {/* 교사 보건실 요청 · 전학 안내 */}

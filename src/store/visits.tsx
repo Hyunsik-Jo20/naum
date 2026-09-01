@@ -343,6 +343,13 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
           const nt = loadNotifyTargets()
           if (nt.teacher) offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: { kind: '접수', sym, number: student.number }, ts: v.createdAt })
           if (nt.parent) emitParent(student.id, { kind: '접수', sym }, v.createdAt)
+          // 보건교사 폰 푸시 — 구독 기기(push_subs)로 "새 접수" 발송(비식별, 실패 무시).
+          if (offline.isOnline())
+            void fetch('/api/push', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ action: 'notify', schoolId: schoolId() }),
+            }).catch(() => {})
         } else if (modeRef.current === 'backend') void apiCreateVisit(v, student.id)
         return v
       },

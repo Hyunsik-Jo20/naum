@@ -163,6 +163,14 @@ VITE_SUPABASE_ANON_KEY=eyJ...
 - **교사·학부모 알림(relay)**: 접수/종료 시 나음이 `relay_*`에 **토큰+암호문** 발신, 교사(반 키)·학부모(학생 키)가 Realtime 수신·복호화.
 - ⚠️ 키는 서버(`/api/keys`)가 `SCHOOL_MASTER_SECRET`에서 **학교별로** 파생해 인증·권한만큼 발급(5-2·5-3). 같은 학교 기기끼리는 자동으로 같은 키, 다른 학교는 키가 달라 복호 불가(격리).
 
+## 7-1. 접수 도착 폰 푸시(Web Push) 설정 — `api/push.js`
+앱이 닫혀 있어도 보건교사 폰/PC로 "새 접수 — 대기 N명" 알림(비식별)이 도착한다.
+1. **SQL**: `supabase/migrations/0013_push_subs.sql` 실행(구독 저장소 `push_subs`, RLS로 클라이언트 접근 차단 — 서버 함수만 사용).
+2. **Vercel env** 추가 후 재배포: `PUSH_VAPID_PUBLIC_KEY` / `PUSH_VAPID_PRIVATE_KEY` (`.env.local` 하단에 생성해 둔 값. 새로 만들려면 `node -e "console.log(JSON.stringify(require('web-push').generateVAPIDKeys()))"`). 선택: `PUSH_VAPID_SUBJECT`(mailto:주소).
+3. **기기 등록**: 알림 받을 기기(폰 포함)에서 보건교사 로그인 → 콘솔 좌측 "이 기기에서 접수 푸시 알림 받기" → 권한 허용. 기기별 1회.
+   - 아이폰은 iOS 16.4+ 에서 **홈 화면에 추가한 앱**으로 열었을 때만 푸시 가능. 안드로이드/PC 크롬은 브라우저에서도 동작.
+- 발송 경로: 접수(키오스크·콘솔 수동) → `/api/push notify` → 학교의 모든 구독 기기. 학교당 분당 10건 상한, 만료 구독 자동 정리.
+
 ## 8. 알려진 한계 / 후속
 - **키 모델**: 학교 비밀이 클라이언트 번들에 포함 → "DB 유출 시 식별 불가"는 보장하나, 앱+계정 접근자는 복호화 가능. 진짜 사용자별 키 교환은 후속.
 - **교사/학부모 계정**: profiles에 `grade/class_no`(교사)·`child_id`(학부모) 지정 필요(3장 SQL 예시).
