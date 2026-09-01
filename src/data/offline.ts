@@ -88,6 +88,17 @@ export const deadCount = () => readArr(DEAD).length
 /** 큐에 재시도(실패 이력) 중인 항목이 있는지 — 상단바 표시용. */
 export const hasFailures = () => load().some((e) => e.tries > 0)
 
+/** 아직 업로드되지 않은(큐 대기) 방문 id 집합 — 재동기화 때 로컬 상태 보호용. */
+export function pendingVisitIds(): Set<string> {
+  const s = new Set<string>()
+  for (const e of load()) {
+    const op = e.op
+    if (op.type === 'createVisit') s.add(op.visit.id)
+    else if (op.type === 'patchVisit' || op.type === 'deleteVisit') s.add(op.id)
+  }
+  return s
+}
+
 export function onChange(cb: () => void): () => void {
   listeners.add(cb)
   return () => listeners.delete(cb)

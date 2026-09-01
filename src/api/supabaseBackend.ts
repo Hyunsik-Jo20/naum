@@ -189,17 +189,35 @@ export async function deleteVisit(id: string): Promise<void> {
   if (le) console.error('[naum:supabase] deleteVisit link', le.message) // 베스트에포트
 }
 
-/** 비식별 방문 변경 실시간 구독(Supabase Realtime). 반환값은 구독 해제 함수. */
-export function subscribeVisits(onVisit: (v: Visit) => void): () => void {
+/** 비식별 방문 변경 실시간 구독(Supabase Realtime). 반환값은 구독 해제 함수.
+ *  DELETE는 old 레코드에 PK(id)만 남아 school_id 필터에 안 걸리므로 무필터로 따로 받는다
+ *  (id는 비식별 난수 — 수신 측은 로컬에 있는 id만 제거하므로 타 학교 이벤트는 무해). */
+export function subscribeVisits(onVisit: (v: Visit) => void, onDelete?: (id: string) => void): () => void {
   const sb = supabase!
   const ch = sb
     .channel(uniqTopic('naum-visits'))
     .on(
       'postgres_changes',
-      { event: '*', schema: 'public', table: 'visits', filter: `school_id=eq.${schoolId()}` },
+      { event: 'INSERT', schema: 'public', table: 'visits', filter: `school_id=eq.${schoolId()}` },
       (payload) => {
         const row = payload.new as Row
         if (row && row.id) onVisit(fromRow(row))
+      },
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'visits', filter: `school_id=eq.${schoolId()}` },
+      (payload) => {
+        const row = payload.new as Row
+        if (row && row.id) onVisit(fromRow(row))
+      },
+    )
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'visits' },
+      (payload) => {
+        const old = payload.old as { id?: string } | null
+        if (old?.id && onDelete) onDelete(old.id)
       },
     )
     .subscribe()

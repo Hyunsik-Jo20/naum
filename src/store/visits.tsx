@@ -157,6 +157,9 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
   storeRef.current = store
   const chanRef = useRef<BroadcastChannel | null>(null)
   const suppressRef = useRef(false)
+  // 방문별 마지막 로컬 변경 시각 — 재동기화가 방금 만든 낙관적 갱신(업로드 중)을 되돌리지 않게 보호.
+  const touchRef = useRef<Record<string, number>>({})
+  const touch = (id: string) => { touchRef.current[id] = Date.now() }
 
   // 부팅: 백엔드 가용성 확인 → backend면 서버에서 하이드레이트(+빈 경우 시드), 아니면 local 폴백.
   useEffect(() => {
@@ -213,10 +216,20 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // [supabase] Realtime 구독 — 비식별 방문 + 암호화 링크(다기기 이름 복원).
+  // [supabase] Realtime 구독 — 비식별 방문(추가·변경·삭제) + 암호화 링크(다기기 이름 복원).
   useEffect(() => {
     if (mode !== 'supabase') return
-    const offV = sb.subscribeVisits((v) => setStore((p) => ({ ...p, visits: upsertVisit(p.visits, v) })))
+    const offV = sb.subscribeVisits(
+      (v) => setStore((p) => ({ ...p, visits: upsertVisit(p.visits, v) })),
+      // 다른 기기의 삭제를 즉시 반영(로컬에 있는 id만 — 타 학교 이벤트는 무시됨).
+      (id) =>
+        setStore((p) => {
+          if (!p.visits.some((v) => v.id === id)) return p
+          const links = { ...p.links }
+          delete links[id]
+          return { visits: p.visits.filter((v) => v.id !== id), links }
+        }),
+    )
     const offL = sb.subscribeLinks((l) =>
       setStore((p) => ({ ...p, links: { ...p.links, [l.visitId]: l.studentId } })),
     )
@@ -226,8 +239,11 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
     }
   }, [mode])
 
-  // [supabase] 재연결/탭 복귀 시 catch-up — Realtime이 끊긴 사이 다른 기기가 만든 방문을 재조회 병합.
-  //  기존 방문은 로컬(낙관적 최신)을 유지하고 없는 것만 추가 → 미업로드 상태를 되돌리지 않음.
+  // [supabase] catch-up 재동기화 — Realtime이 끊긴 사이(폰 절전·네트워크 단절 등) 놓친
+  //  추가·상태변경·삭제를 서버 기준으로 병합. 다기기 콘솔의 대기열 불일치 방지.
+  //  · 서버 우선(server-wins). 단, 아직 업로드 안 된 큐 대기분과 15초 내 로컬 변경분은 보호
+  //    (낙관적 갱신이 업로드 완료 전에 서버의 옛 상태로 되돌아가는 것 방지).
+  //  · 트리거: 재연결·탭 복귀 + 60초 주기(채널이 조용히 죽는 경우 대비).
   useEffect(() => {
     if (mode !== 'supabase') return
     let busy = false
@@ -236,12 +252,25 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
       busy = true
       try {
         const [visits, cloudLinks] = await Promise.all([sb.fetchVisits(), sb.fetchLinks()])
+        const pending = offline.pendingVisitIds()
+        const keepLocal = (id: string) =>
+          pending.has(id) || Date.now() - (touchRef.current[id] ?? 0) < 15000
         setStore((p) => {
-          const have = new Set(p.visits.map((v) => v.id))
-          const add = visits.filter((v) => !have.has(v.id))
-          return add.length || Object.keys(cloudLinks).length
-            ? { visits: [...p.visits, ...add], links: { ...cloudLinks, ...p.links } }
-            : p
+          const serverById = new Map(visits.map((v) => [v.id, v]))
+          const merged: Visit[] = []
+          for (const v of p.visits) {
+            const sv = serverById.get(v.id)
+            if (sv) {
+              merged.push(keepLocal(v.id) ? v : sv)
+              serverById.delete(v.id)
+            } else if (keepLocal(v.id)) {
+              merged.push(v) // 업로드 전(큐 대기·전송 중) — 보존
+            }
+            // else: 서버에서 삭제된 방문 → 로컬에서도 제거
+          }
+          // 다른 기기가 만든 신규 방문. 단 로컬이 방금 삭제한(삭제 op 업로드 중) id는 되살리지 않음.
+          serverById.forEach((v) => { if (!keepLocal(v.id)) merged.push(v) })
+          return { visits: merged, links: { ...p.links, ...cloudLinks } }
         })
       } catch {
         /* 무시(다음 트리거에 재시도) */
@@ -252,9 +281,11 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
     const onVis = () => { if (document.visibilityState === 'visible') void resync() }
     window.addEventListener('online', resync)
     document.addEventListener('visibilitychange', onVis)
+    const iv = window.setInterval(() => void resync(), 60000)
     return () => {
       window.removeEventListener('online', resync)
       document.removeEventListener('visibilitychange', onVis)
+      window.clearInterval(iv)
     }
   }, [mode])
 
@@ -333,6 +364,7 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
           treatments: [],
           createdAt: Date.now(),
         }
+        touch(id)
         setStore((p) => ({ visits: [...p.visits, v], links: { ...p.links, [id]: student.id } }))
         // 원격 반영(실패해도 화면은 유지). supabase=클라우드, backend=스테이션 경유. 둘 다 비식별 visit만.
         if (modeRef.current === 'supabase') {
@@ -355,6 +387,7 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
       },
       startTreating: (id) => {
         const calledAt = Date.now()
+        touch(id)
         setStore((p) => ({
           ...p,
           visits: p.visits.map((v) =>
@@ -366,12 +399,14 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
         else if (modeRef.current === 'backend') void apiPatchVisit(id, patch)
       },
       updateVisit: (id, patch) => {
+        touch(id)
         setStore((p) => ({ ...p, visits: p.visits.map((v) => (v.id === id ? { ...v, ...patch } : v)) }))
         if (modeRef.current === 'supabase') offline.run({ type: 'patchVisit', id, patch })
         else if (modeRef.current === 'backend') void apiPatchVisit(id, patch)
       },
       completeVisit: (id, patch) => {
         const treatedAt = Date.now()
+        touch(id)
         setStore((p) => ({
           ...p,
           visits: p.visits.map((v) =>
@@ -405,6 +440,7 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
       },
       // 방문 삭제(학생이 교실로 가버린 경우 등). 로컬에서 제거 + 클라우드 삭제.
       deleteVisit: (id) => {
+        touch(id)
         setStore((p) => {
           const links = { ...p.links }
           delete links[id]
