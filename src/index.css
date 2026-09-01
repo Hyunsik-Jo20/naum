@@ -1118,6 +1118,12 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
   overflow-y: auto;
   padding-right: 2px;
 }
+/* 폰에서 상황 확인(자리 비움 중) — 3열을 세로 스택으로: 대기 → 처치 → 완료 */
+@media (max-width: 700px) {
+  .queue-3,
+  .app-shell.wide .queue-3 { grid-template-columns: 1fr; }
+  .app-shell.wide .queue-3 > div { max-height: none; overflow: visible; }
+}
 /* 처치 패널 — 콘솔에서 한 화면에 들어오도록 강하게 압축 (인라인 여백은 !important로 덮음) */
 .app-shell.wide .treat-panel { padding: 10px 14px; }
 .app-shell.wide .treat-panel .sec-label { font-size: 12px; margin-bottom: 6px !important; }
