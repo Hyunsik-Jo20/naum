@@ -18,6 +18,7 @@ import { fetchCurrent, type CurrentWeather } from '../data/weatherApi'
 import { deriveAlerts } from '../data/disasters'
 import { useOfficialAlerts } from '../data/useOfficialAlerts'
 import { SCHOOL } from '../data/location'
+import { setBadge, clearBadge } from '../data/appBadge'
 import { pushNotify } from '../push'
 import type { Student, Visit } from '../types'
 
@@ -139,6 +140,14 @@ export default function NurseQueue() {
   const waiting = todays.filter((v) => v.status === 'waiting')
   const treating = todays.filter((v) => v.status === 'treating')
   const done = todays.filter((v) => v.status === 'done')
+
+  // 실행 아이콘 배지(설치형 PWA) — 대기 학생 수를 앱 아이콘에 숫자로 표시.
+  //  보건교사가 자리를 비워 콘솔이 최소화/백그라운드여도, 키오스크 접수가 Realtime으로
+  //  들어오는 즉시 작업표시줄·홈 화면 아이콘의 숫자가 갱신된다(개수만 노출 — 비식별).
+  useEffect(() => {
+    setBadge(waiting.length)
+  }, [waiting.length])
+  useEffect(() => () => clearBadge(), [])
 
   function removeVisit(id: string, name: string) {
     if (confirm(`${name} 학생 방문을 삭제할까요? (교실로 간 경우 등)`)) {
