@@ -167,12 +167,13 @@ export default function NurseQueue() {
     )
   }
 
-  // 실행 아이콘 배지(설치형 PWA) — 대기 학생 수를 앱 아이콘에 숫자로 표시.
+  // 실행 아이콘 배지(설치형 PWA) — 보건실에 있는 학생 수(대기+처치 중)를 앱 아이콘에 표시.
+  //  대기만 세면 빈 대기열 접수가 즉시 자동 처치 시작되어 0으로 보이는 문제가 있어 진행 중 포함.
   //  보건교사가 자리를 비워 콘솔이 최소화/백그라운드여도, 키오스크 접수가 Realtime으로
   //  들어오는 즉시 작업표시줄·홈 화면 아이콘의 숫자가 갱신된다(개수만 노출 — 비식별).
   useEffect(() => {
-    setBadge(waiting.length)
-  }, [waiting.length])
+    setBadge(waiting.length + treating.length)
+  }, [waiting.length, treating.length])
   useEffect(() => () => clearBadge(), [])
 
   function removeVisit(id: string, name: string) {

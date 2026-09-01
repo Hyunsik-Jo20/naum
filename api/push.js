@@ -93,22 +93,24 @@ export default async function handler(req, res) {
       const subs = sr.ok ? await sr.json() : []
       if (!Array.isArray(subs) || subs.length === 0) return res.status(200).json({ ok: true, sent: 0 })
 
-      // 대기 인원(비식별) — 알림 본문·앱 배지에 사용
-      let waiting = null
+      // 진행 중 인원(비식별) = 대기 + 처치 중 — 알림 본문·앱 배지에 사용.
+      //  대기만 세면 빈 대기열에서 콘솔이 즉시 자동 처치 시작한 경우(+insert 도착 전 경합)
+      //  0명이 되어 알림이 무의미해짐. 접수 직후 호출이므로 최소 1명으로 보정.
+      let count = null
       try {
-        const cr = await sb(`visits?school_id=eq.${encodeURIComponent(sch)}&status=eq.waiting&select=id`, {
+        const cr = await sb(`visits?school_id=eq.${encodeURIComponent(sch)}&status=in.(waiting,treating)&select=id`, {
           headers: { Prefer: 'count=exact', Range: '0-0' },
         })
         const range = cr.headers.get('content-range')
         const m2 = range && /\/(\d+)$/.exec(range)
-        if (m2) waiting = Number(m2[1])
+        if (m2) count = Math.max(1, Number(m2[1]))
       } catch { /* 개수 없이 발송 */ }
 
       webpush.setVapidDetails(SUBJECT, PUB, PRIV)
       const payload = JSON.stringify({
         title: '보건실 새 접수',
-        body: waiting != null ? `대기 학생 ${waiting}명 — 콘솔에서 확인하세요.` : '새 접수가 도착했어요. 콘솔에서 확인하세요.',
-        count: waiting ?? undefined,
+        body: count != null ? `보건실에 온 학생 ${count}명 — 콘솔에서 확인하세요.` : '새 접수가 도착했어요. 콘솔에서 확인하세요.',
+        count: count ?? undefined,
         url: '/nurse/queue',
       })
       let sent = 0
