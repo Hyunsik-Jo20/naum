@@ -89,6 +89,7 @@ export function parseRosterRows(rows: string[][]): ParseResult {
     name: find('이름', '성명', 'name'),
     sex: find('성별', 'sex', '남녀', '남여'),
     phone: find('보호자', '연락처', '전화', 'phone'),
+    care: find('요보호', '특이'), // 요보호 사유 텍스트(천식·알레르기 등). O/○만 있어도 표시.
   }
   if (col.grade < 0 || col.cls < 0 || col.name < 0)
     return { students: [], error: '필수 열(학년·반·이름)을 찾지 못했습니다. 머리글을 확인하세요.' }
@@ -129,6 +130,8 @@ export function parseRosterRows(rows: string[][]): ParseResult {
     const sexRaw = col.sex >= 0 ? c[col.sex] ?? '' : ''
     const sex: Sex = parseSexValue(sexRaw) ?? '남'
     const phone = col.phone >= 0 ? c[col.phone] : ''
+    const careRaw = col.care >= 0 ? (c[col.care] ?? '').trim() : ''
+    const care = careRaw ? (/^[oOxX○×]$/.test(careRaw) ? (/[oO○]/.test(careRaw) ? '요보호' : '') : careRaw) : ''
     students.push({
       id: `u_${grade}_${classNo}_${number}_${i}`,
       name,
@@ -137,6 +140,7 @@ export function parseRosterRows(rows: string[][]): ParseResult {
       number,
       sex,
       guardianPhone: phone || undefined,
+      care: care || undefined,
     })
   }
   if (!students.length) return { students: [], error: '읽을 수 있는 학생 행이 없습니다.' }
@@ -151,7 +155,7 @@ export function parseRosterCsv(text: string): ParseResult {
 }
 
 export const ROSTER_TEMPLATE =
-  '학년,반,번호,이름,성별,보호자연락처\n' +
-  '1,1,1,홍길동,남,010-1234-5678\n' +
-  '1,1,2,김영희,여,010-2345-6789\n' +
-  '2,3,5,이철수,남,010-3456-7890\n'
+  '학년,반,번호,이름,성별,보호자연락처,요보호\n' +
+  '1,1,1,홍길동,남,010-1234-5678,\n' +
+  '1,1,2,김영희,여,010-2345-6789,천식\n' +
+  '2,3,5,이철수,남,010-3456-7890,\n'

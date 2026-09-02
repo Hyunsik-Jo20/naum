@@ -73,6 +73,7 @@ const observeLabel = (durMin: number, endHHMM: string) => `관찰 ${durMin}분 (
 export function realEntries(date: Date, visits: Visit[], studentOf: (id: string) => { name: string; grade: number; classNo: number } | undefined): LogEntry[] {
   const dk = dateKey(date)
   return visits
+    .filter((v) => !v.isStaff) // 교직원 방문은 학생 보건일지에서 제외(별도 집계)
     .filter((v) => dateKey(new Date(v.createdAt)) === dk)
     .map((v) => {
       const st = studentOf(v.id)

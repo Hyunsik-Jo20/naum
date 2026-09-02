@@ -20,7 +20,7 @@ import { loadSupplies, saveSupplies } from '../data/supplies'
 import { blockPii } from '../data/piiGuard'
 import { getSchool } from '../data/school'
 import { busanSchools } from '../data/busanSchools'
-import { teacherOf } from '../data/teacherRoster'
+import { teacherOf, staffById } from '../data/teacherRoster'
 import { useVisits } from '../store/visits'
 import type { Disease, Outcome, Visit } from '../types'
 
@@ -63,7 +63,8 @@ export default function TreatPanel({
     return recentVisitHint(student)
   }, [student, visits, visit.id, studentOf])
   const phone = student ? guardianPhone(student) : null
-  const teacher = student ? teacherOf(student.grade, student.classNo) : undefined
+  const teacher = student && !visit.isStaff ? teacherOf(student.grade, student.classNo) : undefined
+  const staffRole = visit.isStaff && student ? staffById(student.id)?.role : undefined
 
   const initial = visit.diseases.length
     ? visit.diseases
@@ -270,28 +271,37 @@ export default function TreatPanel({
   th { width: 110px; background: #f2f0ea; font-weight: 700; white-space: nowrap; }
   .sign { margin-top: 26px; font-size: 13px; display: flex; justify-content: space-between; align-items: flex-end; }
   .foot { margin-top: 14px; font-size: 11px; color: #777; }
-  @media print { body { margin: 12mm; } }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    margin: -10px 0 14px; padding: 9px 12px; border-radius: 8px; background: #eef4ff; font-size: 12px; color: #34549c; }
+  .toolbar button { padding: 7px 18px; border: 0; border-radius: 7px; background: #2c5cc5; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; }
+  #doc:focus { outline: none; }
+  @media print { body { margin: 12mm; } .toolbar { display: none; } }
 </style></head><body>
+<div class="toolbar no-print">
+  <span>✏️ 내용을 클릭해 인쇄 전에 자유롭게 수정할 수 있습니다 — 수정은 인쇄물에만 반영되고 기록(보건일지)에는 남지 않아요.</span>
+  <button onclick="window.print()">인쇄</button>
+</div>
+<div id="doc" contenteditable="true" spellcheck="false">
 <h1>보건실 처치 확인서</h1>
 <div class="sub">${esc2(sch.name)} 보건실 · 발행 ${new Date().toLocaleString('ko-KR')}</div>
 <table>
-  <tr><th>학생</th><td>${esc2(student ? `${student.name} (${classLabel(student)} · ${student.number}번 · ${student.sex})` : `${visit.grade}학년 · ${visit.sex}`)}</td></tr>
-  <tr><th>보호자 연락처</th><td>${esc2(phone ?? '—')}</td></tr>
-  <tr><th>학생 호소 증상</th><td>${esc2(sym || '—')}</td></tr>
+  <tr><th>${visit.isStaff ? '교직원' : '학생'}</th><td>${esc2(student ? (visit.isStaff ? student.name : `${student.name} (${classLabel(student)} · ${student.number}번 · ${student.sex})`) : `${visit.grade}학년 · ${visit.sex}`)}</td></tr>
+  <tr><th>호소 증상</th><td>${esc2(sym || '—')}</td></tr>
   <tr><th>추정 병명</th><td>${esc2(dz)}</td></tr>
   <tr><th>처치 내역</th><td>${esc2(tr)}</td></tr>
   ${memoText ? `<tr><th>특이사항</th><td>${esc2(memoText)}</td></tr>` : ''}
   <tr><th>조치 결과</th><td><b>${esc2(outcome)}</b></td></tr>
   ${esc}
-  <tr><th>접수 시각</th><td>${fmt(visit.createdAt)}</td></tr>
-  <tr><th>처치 시각</th><td>${fmt(visit.treatedAt ?? Date.now())}</td></tr>
+  <tr><th>입실(접수) 시각</th><td>${fmt(visit.createdAt)}</td></tr>
+  <tr><th>퇴실(처치) 시각</th><td>${fmt(visit.treatedAt ?? Date.now())}</td></tr>
+  <tr><th>비고</th><td>&nbsp;</td></tr>
 </table>
 <div class="sign">
   <span>${esc2(sch.name)}${tel ? ` · ☎ ${esc2(tel)}` : ''}</span>
   <span>보건교사: ______________ (서명)</span>
 </div>
 <div class="foot">본 확인서는 학교 보건실의 응급처치 기록으로, 진단서가 아닙니다. 정확한 진단은 의료기관의 진료에 따릅니다.</div>
-<script>window.onload = function(){ setTimeout(function(){ window.print() }, 200) }</script>
+</div>
 </body></html>`
     const w = window.open('', '_blank', 'width=780,height=920')
     if (!w) { alert('팝업이 차단되어 인계서를 열 수 없습니다. 브라우저 팝업 허용 후 다시 시도하세요.'); return }
@@ -343,8 +353,15 @@ export default function TreatPanel({
             <div style={{ fontSize: 18, fontWeight: 600 }}>
               {student?.name ?? '학생'}{' '}
               <span style={{ fontSize: 14, color: 'var(--text-2)', fontWeight: 400 }}>
-                · {student ? `${classLabel(student)} · ${student.sex}` : `${visit.grade}학년 · ${visit.sex}`}
+                · {visit.isStaff
+                  ? `교직원${staffRole ? ` · ${staffRole}` : ''}${student?.sex ? ` · ${student.sex}` : ''}`
+                  : student ? `${classLabel(student)} · ${student.sex}` : `${visit.grade}학년 · ${visit.sex}`}
               </span>
+              {!visit.isStaff && student?.care && (
+                <span className="pill danger" style={{ marginLeft: 8, verticalAlign: 2 }} title="요보호 학생">
+                  <i className="ti ti-shield-heart" aria-hidden="true" /> 요보호 · {student.care}
+                </span>
+              )}
             </div>
             <div className="student-meta">
               <span className="sm-item">
@@ -352,7 +369,7 @@ export default function TreatPanel({
               </span>
               {phone && (
                 <a className="sm-item sm-tel" href={`tel:${phone}`}>
-                  <i className="ti ti-phone" aria-hidden="true" /> 학부모 {phone}
+                  <i className="ti ti-phone" aria-hidden="true" /> {visit.isStaff ? '연락처' : '학부모'} {phone}
                 </a>
               )}
               {teacher && (
@@ -378,8 +395,9 @@ export default function TreatPanel({
             <i className="ti ti-printer" aria-hidden="true" /> 기록 출력
           </button>
           {isDone ? (
-            <span className="pill success">
-              <i className="ti ti-check" aria-hidden="true" /> 종료됨
+            <span className="pill success" title="입실(접수)·퇴실(처치 종료) 시각">
+              <i className="ti ti-check" aria-hidden="true" /> 입실 {fmtTime(visit.createdAt)} → 퇴실{' '}
+              {visit.treatedAt ? fmtTime(visit.treatedAt) : '—'}
             </span>
           ) : (
             <span className="pill info">

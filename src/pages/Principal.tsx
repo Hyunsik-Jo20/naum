@@ -32,7 +32,10 @@ function persist(map: Record<string, DailyReport>) {
 }
 
 export default function Principal() {
-  const { visits, studentOf } = useVisits()
+  const { visits: allVisits, studentOf } = useVisits()
+  // 교직원 방문은 학생 통계(교장 보고)에서 제외 — 별도 집계 대상
+  const visits = allVisits.filter((v) => !v.isStaff)
+  const staffToday = allVisits.filter((v) => v.isStaff && new Date(v.createdAt).toDateString() === new Date().toDateString()).length
   const { sent } = useNotices()
   const [saved, setSaved] = useState<Record<string, DailyReport>>(() => loadSaved())
   const [now] = useState(() => new Date())
@@ -182,7 +185,7 @@ export default function Principal() {
         </div>
 
         <div className="kpi-grid" style={{ marginBottom: 12 }}>
-          <div className="kpi"><div className="kpi-label">총 방문</div><div className="kpi-val">{todayReport.total}</div></div>
+          <div className="kpi"><div className="kpi-label">총 방문(학생)</div><div className="kpi-val">{todayReport.total}{staffToday > 0 && <span className="muted-inline" style={{ fontSize: 12, fontWeight: 400 }}> +교직원 {staffToday}</span>}</div></div>
           <div className="kpi"><div className="kpi-label">교실 복귀</div><div className="kpi-val">{o['교실 복귀']}</div></div>
           <div className="kpi"><div className="kpi-label">귀가</div><div className="kpi-val">{o['귀가']}</div></div>
           <div className={`kpi ${o['병원 이송'] ? 'warn' : ''}`}><div className="kpi-label">병원 이송</div><div className="kpi-val">{o['병원 이송']}</div></div>

@@ -2,7 +2,7 @@
 //  · 비식별 Visit 만 Supabase에 저장/구독(Realtime).
 //  · visit↔student 링크(PII)는 클라우드로 보내지 않고 로컬 스테이션(localStation)에 보관.
 //  · 화면(VisitsCtx)은 그대로 — visits.tsx 의 supabase 모드에서만 사용.
-import type { Disease, Outcome, Sex, Visit, VisitStatus } from '../types'
+import type { Disease, Outcome, Sex, SymptomTile, Visit, VisitStatus } from '../types'
 import { supabase } from '../data/supabaseClient'
 import { saveLink } from '../data/localStation'
 import { schoolLinkKey, encryptJson, decryptJson, type Enc } from '../data/schoolCrypto'
@@ -27,6 +27,7 @@ interface Row {
   called_at: number | null
   treated_at: number | null
   observe_until: number | null
+  is_staff?: boolean | null // 0015 — 교직원 방문(별도 집계). 구버전 행은 null(=학생).
 }
 
 function fromRow(r: Row): Visit {
@@ -47,6 +48,7 @@ function fromRow(r: Row): Visit {
     calledAt: r.called_at ?? undefined,
     treatedAt: r.treated_at ?? undefined,
     observeUntil: r.observe_until ?? undefined,
+    isStaff: r.is_staff ?? undefined,
   }
 }
 
@@ -54,6 +56,8 @@ function toRow(v: Visit, sch: string): Row & { school_id: string } {
   return {
     id: v.id,
     school_id: sch,
+    // is_staff는 교직원일 때만 포함 — 0015 미적용 DB에서도 학생 접수는 계속 동작
+    ...(v.isStaff ? { is_staff: true } : {}),
     grade: v.grade,
     sex: v.sex,
     symptom_tile_ids: v.symptomTileIds,
@@ -187,6 +191,29 @@ export async function deleteVisit(id: string): Promise<void> {
   if (error) throw new Error(`deleteVisit: ${error.message}`) // 재시도 위해 전파(삭제는 멱등)
   const { error: le } = await sb.from('visit_links').delete().eq('visit_id', id).eq('school_id', schoolId())
   if (le) console.error('[naum:supabase] deleteVisit link', le.message) // 베스트에포트
+}
+
+// ── 학교 공유 설정(0014 school_settings) — 증상 타일 목록 다기기 동기화 ──
+/** 클라우드의 학교 증상 목록. 없으면 null(기본 목록 사용). */
+export async function fetchCloudSymptoms(): Promise<SymptomTile[] | null> {
+  const sb = supabase!
+  const { data, error } = await sb
+    .from('school_settings')
+    .select('symptoms')
+    .eq('school_id', schoolId())
+    .maybeSingle()
+  if (error || !data?.symptoms) return null
+  const a = data.symptoms as SymptomTile[]
+  return Array.isArray(a) && a.length ? a : null
+}
+
+/** 증상 목록을 클라우드에 저장(보건교사 전용 — RLS). 편집 기기 외 다른 기기 반영용. */
+export async function saveCloudSymptoms(tiles: SymptomTile[]): Promise<void> {
+  const sb = supabase!
+  const { error } = await sb
+    .from('school_settings')
+    .upsert({ school_id: schoolId(), symptoms: tiles, updated_at: new Date().toISOString() })
+  if (error) throw new Error(`saveCloudSymptoms: ${error.message}`)
 }
 
 /** 비식별 방문 변경 실시간 구독(Supabase Realtime). 반환값은 구독 해제 함수.

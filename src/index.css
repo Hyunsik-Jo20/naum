@@ -869,6 +869,9 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
 }
 .pill.success { background: var(--success-bg); color: var(--success); }
 .pill.info { background: var(--info-bg); color: var(--info); }
+.pill.danger { background: var(--danger-bg); color: var(--danger); }
+/* 대기·완료 카드의 요보호 마크 */
+.care-mark { color: var(--danger); margin-left: 5px; font-size: 13px; vertical-align: -1px; }
 
 .avatar {
   width: 40px; height: 40px;

@@ -2,6 +2,8 @@
 //  이 브라우저(localStorage)에 저장, 적용 시 새로고침(명부와 동일 패턴). 계통은 통계 집계에 쓰인다.
 import { useState } from 'react'
 import { DEFAULT_SYMPTOM_TILES, DISEASE_CATEGORIES, symptomTiles } from '../data/mock'
+import { SUPABASE_ENABLED } from '../data/supabaseClient'
+import { saveCloudSymptoms } from '../api/supabaseBackend'
 import type { DiseaseCategory, SymptomTile } from '../types'
 
 const LS = 'naum.symptoms'
@@ -47,16 +49,34 @@ export default function SymptomEditModal({ onClose }: { onClose: () => void }) {
     })
   }
 
-  function save() {
+  // 저장 = 이 기기 localStorage + 클라우드(school_settings) — 키오스크 등 다른 기기는
+  //  부팅/대기화면 복귀 때 클라우드에서 받아 자동 반영된다.
+  async function pushCloud(list: SymptomTile[]): Promise<boolean> {
+    if (!SUPABASE_ENABLED) return true
+    try {
+      await saveCloudSymptoms(list)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function save() {
     if (tiles.length === 0) { alert('증상이 최소 1개는 필요해요.'); return }
     try { localStorage.setItem(LS, JSON.stringify(tiles)) } catch { /* ignore */ }
-    alert('증상 목록을 적용했습니다. 화면을 새로고침합니다. (키오스크 탭도 새로고침하세요)')
+    const ok = await pushCloud(tiles)
+    alert(
+      ok
+        ? '증상 목록을 적용했습니다. 키오스크 등 다른 기기도 자동으로 반영됩니다(대기 화면 복귀 시).'
+        : '이 기기에는 적용됐지만 클라우드 동기화에 실패했습니다. 다른 기기 반영이 늦을 수 있어요(네트워크 확인 후 다시 저장).',
+    )
     window.location.reload()
   }
 
-  function restoreDefault() {
+  async function restoreDefault() {
     if (!confirm('기본 증상 9개로 되돌릴까요?')) return
     try { localStorage.removeItem(LS) } catch { /* ignore */ }
+    await pushCloud(DEFAULT_SYMPTOM_TILES) // 다른 기기에도 기본값 전파
     window.location.reload()
   }
 

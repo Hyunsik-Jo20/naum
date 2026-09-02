@@ -69,6 +69,7 @@ export async function fetchEduVisits(): Promise<EduVisitRow[]> {
       .select('school_id,grade,sex,symptom_tile_ids,diseases,status,created_at')
       .gte('created_at', since)
       .neq('school_id', 'demo')
+      .or('is_staff.is.null,is_staff.eq.false') // 교직원 방문 제외(학생 비식별 집계)
       .order('created_at', { ascending: true })
       .range(from, from + PAGE - 1)
     if (error || !data) break

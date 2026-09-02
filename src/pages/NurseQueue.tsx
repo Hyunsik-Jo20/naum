@@ -13,6 +13,8 @@ import ParentNotifyModal from '../components/ParentNotifyModal'
 import SymptomEditModal from '../components/SymptomEditModal'
 import { flushDue, parentNotifySummary } from '../data/parentNotify'
 import { loadRequests, subscribeRequests, removeRequest, type NurseInboxItem } from '../data/nurseRequest'
+import { staffById } from '../data/teacherRoster'
+import StaffVisitModal from '../components/StaffVisitModal'
 import { roster, saveRoster } from '../data/localRoster'
 import { fetchCurrent, type CurrentWeather } from '../data/weatherApi'
 import { deriveAlerts } from '../data/disasters'
@@ -35,7 +37,7 @@ function symptomText(v: Visit): string {
 }
 
 export default function NurseQueue() {
-  const { visits, addVisit, startTreating, completeVisit, updateVisit, deleteVisit, studentOf } = useVisits()
+  const { visits, addVisit, addStaffVisit, startTreating, completeVisit, updateVisit, deleteVisit, studentOf } = useVisits()
   const { nurseInbox, clearNurseInbox, thresholds } = useNotices()
   const [wx, setWx] = useState<CurrentWeather | null>(null)
   const notifiedAlerts = useRef<Set<string>>(new Set())
@@ -48,7 +50,13 @@ export default function NurseQueue() {
   const [notifyT, setNotifyT] = useState(() => loadNotifyTargets())
   const [showParentNotify, setShowParentNotify] = useState(false)
   const [showSymptomEdit, setShowSymptomEdit] = useState(false)
+  const [showStaffAdd, setShowStaffAdd] = useState(false) // 교직원 접수 모달
   const [parentSummary, setParentSummary] = useState(() => parentNotifySummary())
+
+  // 홈 런처 "증상 목록 편집" 카드에서 진입(?edit=symptoms) — 모달 즉시 열기
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('edit') === 'symptoms') setShowSymptomEdit(true)
+  }, [])
   const [, setTick] = useState(0) // 관찰 남은시간 갱신·종료 감지용 주기 리렌더
 
   function toggleNotify(key: 'teacher' | 'parent') {
@@ -231,11 +239,19 @@ export default function NurseQueue() {
   }
 
   function nameOf(v: Visit): string {
-    return studentOf(v.id)?.name ?? '학생'
+    return studentOf(v.id)?.name ?? (v.isStaff ? '교직원' : '학생')
   }
   function clsOf(v: Visit): string {
+    if (v.isStaff) {
+      const sf = studentOf(v.id)
+      return sf ? (staffById(sf.id)?.role ?? '교직원') : '교직원'
+    }
     const s = studentOf(v.id)
     return s ? classLabel(s) : ''
+  }
+  // 요보호 표시(카드용) — 사유는 title로
+  function careOf(v: Visit): string | undefined {
+    return v.isStaff ? undefined : studentOf(v.id)?.care
   }
 
   return (
@@ -423,6 +439,9 @@ export default function NurseQueue() {
                     </button>
                     <div className="vc-name">
                       {nameOf(v)} <span className="vc-class">{clsOf(v)}</span>
+                      {careOf(v) && (
+                        <i className="ti ti-shield-heart care-mark" title={`요보호 · ${careOf(v)}`} aria-hidden="true" />
+                      )}
                     </div>
                     <div className="vc-sym">{symptomText(v)}</div>
                     <div className="vc-foot warning-t">{minutesSince(v.createdAt)}분 대기</div>
@@ -431,6 +450,9 @@ export default function NurseQueue() {
               )}
               <button className="add-visit-btn" onClick={() => setShowAdd(true)}>
                 <i className="ti ti-plus" aria-hidden="true" /> 직접 접수
+              </button>
+              <button className="add-visit-btn" onClick={() => setShowStaffAdd(true)} title="교직원 방문 접수 — 학생 통계와 분리 집계">
+                <i className="ti ti-user-star" aria-hidden="true" /> 교직원 접수
               </button>
             </div>
           </div>
@@ -500,6 +522,9 @@ export default function NurseQueue() {
                     </button>
                     <div className="vc-name">
                       {nameOf(v)} <span className="vc-class">{clsOf(v)}</span>
+                      {careOf(v) && (
+                        <i className="ti ti-shield-heart care-mark" title={`요보호 · ${careOf(v)}`} aria-hidden="true" />
+                      )}
                     </div>
                     <div className="vc-sym">{symptomText(v)}</div>
                     {ended ? (
@@ -528,6 +553,19 @@ export default function NurseQueue() {
       </p>
 
       {showAdd && <AddVisitModal onClose={() => setShowAdd(false)} onSubmit={handleAdd} />}
+      {showStaffAdd && (
+        <StaffVisitModal
+          onClose={() => setShowStaffAdd(false)}
+          onSubmit={(sf, sex, tileIds, mode) => {
+            const v = addStaffVisit(sf, sex, tileIds)
+            if (mode === 'treat') {
+              startTreating(v.id)
+              setActiveId(v.id)
+            }
+            setShowStaffAdd(false)
+          }}
+        />
+      )}
       {showToken && <LoginTokenModal onClose={() => setShowToken(false)} />}
       {showParentNotify && <ParentNotifyModal onClose={() => { setShowParentNotify(false); setParentSummary(parentNotifySummary()) }} />}
       {showSymptomEdit && <SymptomEditModal onClose={() => setShowSymptomEdit(false)} />}

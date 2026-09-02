@@ -15,6 +15,7 @@ const items: Item[] = [
   { to: '/notify', icon: 'ti-bell', title: '담임·학부모 알림', desc: '접수·종료 2회 · 담임/학부모 보기', roles: ['nurse'] },
   { to: '/principal', icon: 'ti-clipboard-text', title: '교장 보고', desc: '일일 보고 자동 마감 · 보건일지 엑셀', roles: ['nurse'] },
   { to: '/roster', icon: 'ti-users', title: '학생 명부 관리', desc: '로컬 명부 엑셀/CSV 업로드 (PII 로컬)', roles: ['nurse'] },
+  { to: '/nurse/queue?edit=symptoms', icon: 'ti-list-details', title: '증상 목록 편집', desc: '키오스크 증상 버튼 추가·삭제·순서 (전 기기 반영)', roles: ['nurse'] },
   { to: '/parents', icon: 'ti-shield-lock', title: '보호자 알림 (토큰 라우팅)', desc: '익명 토큰 등록·발송 데모', roles: ['nurse'] },
   { to: '/teacher', icon: 'ti-user', title: '우리 반 보건실 알림', desc: '담임 — 우리 반 학생 접수·종료', roles: ['teacher'] },
   { to: '/parent', icon: 'ti-device-mobile', title: '자녀 보건실 알림', desc: '학부모 — 자녀 알림만', roles: ['parent'] },

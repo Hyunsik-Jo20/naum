@@ -22,6 +22,16 @@ export interface Student {
   number: number
   sex: Sex
   guardianPhone?: string // 보호자 연락처(로컬 전용). 업로드 명부에서 채움.
+  care?: string // 요보호 사유(천식·알레르기 등, 로컬 전용). 값이 있으면 요보호 학생.
+}
+
+/** 담임 외 교직원(로컬 전용) — 교직원 명부 업로드에서 학년·반이 빈 행. 콘솔 수동 접수 대상. */
+export interface Staff {
+  id: string
+  name: string
+  role?: string // 구분(교장·교감·행정·조리 등)
+  sex?: Sex
+  phone?: string
 }
 
 /** 학생 키오스크용 쉬운 말 + 그림 타일. disease/category는 보건교사 확정 시 추천 후보. */
@@ -62,4 +72,5 @@ export interface Visit {
   calledAt?: number
   treatedAt?: number
   observeUntil?: number // 관찰 결과 시, 보건실 관찰 종료 예정 시각(epoch ms)
+  isStaff?: boolean // 교직원 방문(별도 집계 — 학생 통계·담임/학부모 알림 제외). grade=0으로 기록.
 }

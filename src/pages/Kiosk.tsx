@@ -11,6 +11,7 @@ import { useVisits } from '../store/visits'
 import { SUPABASE_ENABLED } from '../data/supabaseClient'
 import { hasSchool } from '../data/school'
 import { sendNurseRequest } from '../data/nurseRequest'
+import { syncSymptomsFromCloud } from '../data/symptomsSync'
 import { listenOnce, matchSymptomTiles, type VoiceOutcome } from '../data/voiceSymptom'
 import type { Student } from '../types'
 
@@ -44,6 +45,15 @@ export default function Kiosk() {
   const [ticket, setTicket] = useState<number>(0)
   const [byQr, setByQr] = useState(false)
   const visualStep = step === 'symptom' ? 'symptom' : step === 'id' && pickedClass ? 'roster' : 'welcome'
+
+  // 콘솔에서 편집한 증상 목록을 키오스크가 상시 반영 — 대기(환영) 화면에 있을 때만
+  //  클라우드와 비교해, 바뀌었으면 새로고침(접수 진행 중에는 건드리지 않음).
+  useEffect(() => {
+    if (visualStep !== 'welcome') return
+    void syncSymptomsFromCloud().then((changed) => {
+      if (changed) window.location.reload()
+    })
+  }, [visualStep])
 
   function reset() {
     setStep('id')

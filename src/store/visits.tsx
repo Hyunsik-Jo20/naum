@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Student, Visit } from '../types'
+import type { Staff, Student, Visit } from '../types'
 import { findStudent, suggestDiseases } from '../data/mock'
+import { staffById } from '../data/teacherRoster'
 import { roster } from '../data/localRoster'
 import {
   probeBackend,
@@ -41,6 +42,8 @@ interface VisitsCtx {
   getVisit: (id: string) => Visit | undefined
   studentOf: (visitId: string) => Student | undefined
   addVisit: (student: Student, symptomTileIds: string[]) => Visit
+  /** 교직원 접수(콘솔 수동 전용) — 담임·학부모 알림 없음, 학생 통계에서 제외(별도 집계). */
+  addStaffVisit: (staff: Staff, sex: '남' | '여', symptomTileIds: string[]) => Visit
   startTreating: (id: string) => void
   completeVisit: (id: string, patch: Partial<Visit>) => void
   updateVisit: (id: string, patch: Partial<Visit>) => void
@@ -347,7 +350,13 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
       getVisit: (id) => store.visits.find((v) => v.id === id),
       studentOf: (visitId) => {
         const sid = store.links[visitId]
-        return sid ? findStudent(sid) : undefined
+        if (!sid) return undefined
+        const st = findStudent(sid)
+        if (st) return st
+        // 교직원 방문 — 명부의 교직원을 Student 형태로 변환해 기존 화면 로직 재사용
+        const sf = staffById(sid)
+        if (!sf) return undefined
+        return { id: sf.id, name: sf.name, grade: 0, classNo: 0, number: 0, sex: sf.sex ?? '여', guardianPhone: sf.phone }
       },
       addVisit: (student, symptomTileIds) => {
         // id에 학교+시각(36진수)을 포함 — 멀티테넌트에서 타 학교와 id 충돌 시
@@ -383,6 +392,34 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
               body: JSON.stringify({ action: 'notify', schoolId: schoolId() }),
             }).catch(() => {})
         } else if (modeRef.current === 'backend') void apiCreateVisit(v, student.id)
+        return v
+      },
+      // 교직원 접수 — grade 0 + isStaff. 담임·학부모 알림은 해당 없음(발송 안 함), 폰 푸시만.
+      addStaffVisit: (staff, sex, symptomTileIds) => {
+        const id = `v-${schoolId()}-${WIN}-${Date.now().toString(36)}-${++counter}`
+        const v: Visit = {
+          id,
+          grade: 0,
+          sex,
+          symptomTileIds,
+          status: 'waiting',
+          ticket: counter - 70,
+          diseases: [],
+          treatments: [],
+          createdAt: Date.now(),
+          isStaff: true,
+        }
+        touch(id)
+        setStore((p) => ({ visits: [...p.visits, v], links: { ...p.links, [id]: staff.id } }))
+        if (modeRef.current === 'supabase') {
+          offline.run({ type: 'createVisit', visit: v, studentId: staff.id, schoolId: schoolId() })
+          if (offline.isOnline())
+            void fetch('/api/push', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ action: 'notify', schoolId: schoolId() }),
+            }).catch(() => {})
+        } else if (modeRef.current === 'backend') void apiCreateVisit(v, staff.id)
         return v
       },
       startTreating: (id) => {
