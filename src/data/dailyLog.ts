@@ -47,3 +47,57 @@ export function saveDailyLog(date: Date, log: DailyLog): void {
   else all[k] = log
   setSecureRaw(LS, JSON.stringify(all))
 }
+
+// ── 방학·휴업일(학교 자체 휴업 — 방학·재량휴업일·개교기념일 등) ──
+//  공휴일(holidays)과 별개로 학교가 지정. 캘린더에 표시되고 보건일지에서 미운영일로 처리된다.
+const LS_OFF = 'naum.schoolOff'
+
+function loadOff(): Record<string, string> {
+  try {
+    const o = JSON.parse(getSecureRaw(LS_OFF) || 'null')
+    return o && typeof o === 'object' ? (o as Record<string, string>) : {}
+  } catch {
+    return {}
+  }
+}
+
+/** 해당 날짜의 휴업 명칭(방학 등). 없으면 undefined. */
+export function offNameOf(date: Date): string | undefined {
+  return loadOff()[dailyKey(date)]
+}
+
+export function offDates(): Record<string, string> {
+  return loadOff()
+}
+
+/** 기간(시작~종료, 양끝 포함)을 휴업일로 지정. label 예: 여름방학, 재량휴업일. */
+export function setOffRange(start: Date, end: Date, label: string): number {
+  const all = loadOff()
+  let n = 0
+  const d = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+  const last = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+  while (d.getTime() <= last.getTime() && n < 400) {
+    all[dailyKey(d)] = label
+    d.setDate(d.getDate() + 1)
+    n++
+  }
+  setSecureRaw(LS_OFF, JSON.stringify(all))
+  return n
+}
+
+/** 기간의 휴업 지정을 해제. 해제된 날 수 반환. */
+export function clearOffRange(start: Date, end: Date): number {
+  const all = loadOff()
+  let n = 0
+  const d = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+  const last = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+  while (d.getTime() <= last.getTime() && n < 4000) {
+    if (all[dailyKey(d)]) {
+      delete all[dailyKey(d)]
+      n++
+    }
+    d.setDate(d.getDate() + 1)
+  }
+  setSecureRaw(LS_OFF, JSON.stringify(all))
+  return n
+}

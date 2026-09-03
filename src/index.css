@@ -1596,6 +1596,14 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
   width: 4px; height: 4px; border-radius: 50%; background: var(--info);
 }
 .dl-day.sel .dl-dot { background: #fff; }
+/* 방학·휴업일 — 빗금 표시 */
+.dl-day.off {
+  color: var(--text-3);
+  background: repeating-linear-gradient(135deg, transparent, transparent 4px, rgba(150, 120, 120, .14) 4px, rgba(150, 120, 120, .14) 8px);
+}
+.dl-day.off.sel { background: var(--info); color: #fff; }
+.dl-off { margin-top: 8px; padding: 10px; border: 1px dashed var(--border-2); border-radius: 12px; }
+.dl-off input[type='date'] { font-size: 12px; }
 .dl-field { margin-top: 10px; }
 .dl-field textarea {
   width: 100%;

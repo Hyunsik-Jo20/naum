@@ -3,7 +3,7 @@
 import type { Sex, Visit } from '../types'
 import { tileById } from '../data/mock'
 import { holidayName, isOperatingDay } from '../data/holidays'
-import { dailyLogOf } from './dailyLog'
+import { dailyLogOf, offNameOf } from './dailyLog'
 import type { XCell, XRow, XSheet } from './excel'
 
 const WD = ['일', '월', '화', '수', '목', '금', '토']
@@ -142,8 +142,9 @@ function dayBlockCells(blockStart: number, date: Date, entries: LogEntry[], stat
     map.get(row)!.push(cell)
   }
   const C = (rel: number) => blockStart + rel
-  const op = isOperatingDay(date)
-  const hol = holidayName(date)
+  const offName = offNameOf(date) // 학교 지정 휴업(방학·재량휴업일 등)
+  const op = isOperatingDay(date) && !offName
+  const hol = holidayName(date) ?? offName
 
   // 행2~3: 제목 + 결재란 (결재칸 폭 확대)
   put(2, { col: C(0), value: '보   건   일   지', across: 16, style: 'title' })
