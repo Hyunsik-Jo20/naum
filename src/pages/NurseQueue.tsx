@@ -1,17 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { classLabel, tileById } from '../data/mock'
 import { minutesSince, useVisits } from '../store/visits'
 import { useNotices } from '../store/notices'
 import TreatPanel from '../components/TreatPanel'
 import AddVisitModal from '../components/AddVisitModal'
-import LoginTokenModal from '../components/LoginTokenModal'
 import ObserveResolveModal from '../components/ObserveResolveModal'
 import ObservePickerModal from '../components/ObservePickerModal'
-import { loadNotifyTargets, saveNotifyTargets } from '../data/notifyTargets'
-import ParentNotifyModal from '../components/ParentNotifyModal'
 import SymptomEditModal from '../components/SymptomEditModal'
-import { flushDue, parentNotifySummary } from '../data/parentNotify'
+import { flushDue } from '../data/parentNotify'
 import { loadRequests, subscribeRequests, removeRequest, type NurseInboxItem } from '../data/nurseRequest'
 import { staffById } from '../data/teacherRoster'
 import StaffVisitModal from '../components/StaffVisitModal'
@@ -22,7 +18,7 @@ import { deriveAlerts } from '../data/disasters'
 import { useOfficialAlerts } from '../data/useOfficialAlerts'
 import { SCHOOL } from '../data/location'
 import { setBadge, clearBadge } from '../data/appBadge'
-import { pushNotify, remotePushSupported, remotePushActive, subscribeRemotePush, unsubscribeRemotePush } from '../push'
+import { pushNotify } from '../push'
 import type { Student, Visit } from '../types'
 
 function hhmm(ts: number): string {
@@ -39,21 +35,17 @@ function symptomText(v: Visit): string {
 
 export default function NurseQueue() {
   const { visits, addVisit, addStaffVisit, startTreating, completeVisit, updateVisit, deleteVisit, studentOf } = useVisits()
-  const { nurseInbox, clearNurseInbox, thresholds } = useNotices()
+  const { thresholds } = useNotices()
   const [wx, setWx] = useState<CurrentWeather | null>(null)
   const notifiedAlerts = useRef<Set<string>>(new Set())
   const [activeId, setActiveId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
-  const [showToken, setShowToken] = useState(false)
   const [resolveId, setResolveId] = useState<string | null>(null) // 관찰 종료 결과 선택 대상
   const [extendId, setExtendId] = useState<string | null>(null) // 관찰 연장 대상
   const [requests, setRequests] = useState<NurseInboxItem[]>([]) // 교사 보건실 요청·전학 안내
-  const [notifyT, setNotifyT] = useState(() => loadNotifyTargets())
-  const [showParentNotify, setShowParentNotify] = useState(false)
   const [showSymptomEdit, setShowSymptomEdit] = useState(false)
   const [showStaffAdd, setShowStaffAdd] = useState(false) // 교직원 접수 모달
   const [showDailyLog, setShowDailyLog] = useState(false) // 보건 일일업무 기록
-  const [parentSummary, setParentSummary] = useState(() => parentNotifySummary())
 
   // 홈 런처 카드에서 진입 — 해당 모달 즉시 열기(?edit=symptoms / ?edit=dailylog)
   useEffect(() => {
@@ -62,14 +54,6 @@ export default function NurseQueue() {
     else if (e === 'dailylog') setShowDailyLog(true)
   }, [])
   const [, setTick] = useState(0) // 관찰 남은시간 갱신·종료 감지용 주기 리렌더
-
-  function toggleNotify(key: 'teacher' | 'parent') {
-    setNotifyT((prev) => {
-      const next = { ...prev, [key]: !prev[key] }
-      saveNotifyTargets(next)
-      return next
-    })
-  }
 
   // 관찰 시간 카운트다운/종료 감지 — 20초마다 리렌더
   useEffect(() => {
@@ -152,32 +136,6 @@ export default function NurseQueue() {
   const waiting = todays.filter((v) => v.status === 'waiting')
   const treating = todays.filter((v) => v.status === 'treating')
   const done = todays.filter((v) => v.status === 'done')
-
-  // 접수 도착 폰 푸시 — 이 기기(폰/PC)의 구독 상태와 토글.
-  const [remotePush, setRemotePush] = useState(false)
-  useEffect(() => {
-    void remotePushActive().then(setRemotePush)
-  }, [])
-  async function toggleRemotePush() {
-    if (remotePush) {
-      await unsubscribeRemotePush()
-      setRemotePush(false)
-      return
-    }
-    const r = await subscribeRemotePush()
-    if (r === 'ok') { setRemotePush(true); return }
-    alert(
-      r === 'denied'
-        ? '알림 권한이 거부되어 있습니다. 브라우저 설정(주소창 자물쇠 → 알림)에서 허용 후 다시 시도하세요.'
-        : r === 'unsupported'
-          ? '이 브라우저는 푸시 알림을 지원하지 않습니다. (아이폰은 홈 화면에 추가한 앱에서만 가능)'
-          : r === 'unconfigured'
-            ? '서버에 푸시 키(VAPID)가 아직 설정되지 않았습니다. 관리 문서의 푸시 설정을 완료하세요.'
-            : r === 'login_required'
-              ? '보건교사 로그인 상태에서만 등록할 수 있습니다.'
-              : '푸시 등록에 실패했습니다. 잠시 후 다시 시도하세요.',
-    )
-  }
 
   // 실행 아이콘 배지(설치형 PWA) — 보건실에 있는 학생 수(대기+처치 중)를 앱 아이콘에 표시.
   //  대기만 세면 빈 대기열 접수가 즉시 자동 처치 시작되어 0으로 보이는 문제가 있어 진행 중 포함.
@@ -268,43 +226,6 @@ export default function NurseQueue() {
             <span className="muted" style={{ fontSize: 12 }}>
               오늘 {todays.length}명 · 대기 {waiting.length} · 처치 {treating.length}
             </span>
-            <div className="row" style={{ gap: 6, width: '100%' }}>
-              <Link to="/principal" className="btn small" style={{ flex: 1, justifyContent: 'center' }}>
-                <i className="ti ti-clipboard-text" aria-hidden="true" /> 교장 보고
-              </Link>
-              <Link to="/roster" className="btn ghost small" style={{ flex: 1, justifyContent: 'center' }} title="학생 명부 관리">
-                <i className="ti ti-users" aria-hidden="true" /> 명부
-              </Link>
-            </div>
-            <button className="btn ghost small" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowToken(true)} title="교사·학부모 로그인 토큰 발급">
-              <i className="ti ti-key" aria-hidden="true" /> 로그인 토큰 발급
-            </button>
-            <button className="btn ghost small" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowSymptomEdit(true)} title="키오스크·접수의 증상 버튼 목록 편집">
-              <i className="ti ti-list-details" aria-hidden="true" /> 증상 목록 편집
-            </button>
-            <button className="btn ghost small" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowDailyLog(true)} title="보건교육·보건업무·학교행사 기록 — 보건일지 상단에 자동 반영">
-              <i className="ti ti-notebook" aria-hidden="true" /> 보건 일일업무 기록
-            </button>
-            <div className="notify-targets" title="접수·처치 알림을 누구에게 보낼지 선택">
-              <span className="nt-label"><i className="ti ti-bell" aria-hidden="true" /> 알림 대상</span>
-              <label className={`nt-chip ${notifyT.teacher ? 'on' : ''}`}>
-                <input type="checkbox" checked={notifyT.teacher} onChange={() => toggleNotify('teacher')} /> 담임
-              </label>
-              <label className={`nt-chip ${notifyT.parent ? 'on' : ''}`}>
-                <input type="checkbox" checked={notifyT.parent} onChange={() => toggleNotify('parent')} /> 학부모
-              </label>
-              {notifyT.parent && (
-                <button
-                  type="button"
-                  className="nt-chip"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => setShowParentNotify(true)}
-                  title="학부모 알림을 실시간 대신 특정 시간에 모아 보낼 수 있습니다"
-                >
-                  <i className="ti ti-clock-hour-4" aria-hidden="true" /> 학부모 발송: {parentSummary}
-                </button>
-              )}
-            </div>
             {/* 앵커 + target=_blank — window.open(크기지정)은 팝업 차단 대상이라 링크로 새 탭/창을 연다 */}
             <a
               href="/kiosk"
@@ -316,17 +237,10 @@ export default function NurseQueue() {
             >
               <i className="ti ti-device-tablet" aria-hidden="true" /> 학생 키오스크 새 탭으로 열기
             </a>
-            {remotePushSupported() && (
-              <button
-                className={`btn small ${remotePush ? '' : 'ghost'}`}
-                style={{ width: '100%', justifyContent: 'center', marginTop: 6 }}
-                onClick={() => void toggleRemotePush()}
-                title="접수가 도착하면 이 기기로 푸시 알림을 보냅니다. 폰에서 쓰려면 폰에서 로그인 후 이 버튼을 누르세요(기기별 설정)."
-              >
-                <i className={`ti ${remotePush ? 'ti-bell-check' : 'ti-bell-plus'}`} aria-hidden="true" />
-                {remotePush ? '이 기기 접수 알림 켜짐 — 누르면 끄기' : '이 기기에서 접수 푸시 알림 받기'}
-              </button>
-            )}
+            <button className="btn ghost small" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowDailyLog(true)} title="보건교육·보건업무·학교행사 기록 — 보건일지 상단에 자동 반영">
+              <i className="ti ti-notebook" aria-hidden="true" /> 보건 일일업무 기록
+            </button>
+            {/* 토큰 발급·증상 편집·알림 대상·푸시는 상단 ⚙ 설정으로, 받은 공지는 🔔 종으로 이동 */}
           </div>
 
           {/* 교사 보건실 요청 · 전학 안내 */}
@@ -390,43 +304,7 @@ export default function NurseQueue() {
             </div>
           )}
 
-          {/* 받은 공지·알림 — 담임·학부모 메시지 + 교육청 공지·경보 */}
-          <div className="recv-box">
-            <div className="row between" style={{ marginBottom: 6 }}>
-              <span className="col-head info-t" style={{ padding: 0 }}>
-                <i className="ti ti-inbox" aria-hidden="true" /> 받은 공지·알림 · {nurseInbox.length}
-              </span>
-              {nurseInbox.length > 0 && (
-                <button className="btn ghost small" onClick={clearNurseInbox} title="모두 지우기">
-                  <i className="ti ti-trash" aria-hidden="true" />
-                </button>
-              )}
-            </div>
-            {nurseInbox.length === 0 ? (
-              <div className="col-empty">받은 알림이 없습니다.</div>
-            ) : (
-              <div className="recv-list">
-                {nurseInbox.map((m, i) => (
-                  <div key={i} className={`recv-item ${m.kind ?? 'msg'}`}>
-                    <div className="recv-top">
-                      <span className="recv-from">
-                        {m.kind === 'alert' ? (
-                          <><i className="ti ti-alert-triangle" aria-hidden="true" /> 재난 경보</>
-                        ) : m.kind === 'notice' ? (
-                          <><i className="ti ti-speakerphone" aria-hidden="true" /> 교육청 공지</>
-                        ) : (
-                          m.sender ?? '발신자'
-                        )}
-                      </span>
-                      <span className="recv-time">{hhmm(m.ts)}</span>
-                    </div>
-                    <div className="recv-title">{m.title}</div>
-                    {m.body && <div className="recv-body">{m.body}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* 받은 공지·알림은 상단 🔔 종 아이콘 팝업으로 이동 */}
           <div className="queue-panel waiting">
             <div className="col-head warning-t">
               <i className="ti ti-hourglass" aria-hidden="true" /> 대기 중 · {waiting.length}
@@ -573,8 +451,6 @@ export default function NurseQueue() {
           }}
         />
       )}
-      {showToken && <LoginTokenModal onClose={() => setShowToken(false)} />}
-      {showParentNotify && <ParentNotifyModal onClose={() => { setShowParentNotify(false); setParentSummary(parentNotifySummary()) }} />}
       {showSymptomEdit && <SymptomEditModal onClose={() => setShowSymptomEdit(false)} />}
       {showDailyLog && <DailyLogModal onClose={() => setShowDailyLog(false)} />}
       {resolveId && (

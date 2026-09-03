@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { Routes, Route, Link, Navigate, useLocation } from 'react-router-dom'
 import Login from './pages/Login'
 // 라우트별 코드 분할 — 초기 번들 축소(특히 교육청 지도/차트). Login만 즉시 로드(진입).
@@ -18,9 +18,11 @@ import SyncStatus from './components/SyncStatus'
 import InstallButton from './components/InstallButton'
 import AutoNoticeSettings from './components/AutoNoticeSettings'
 import HeaderWeather from './components/HeaderWeather'
+import { NoticeBell, SettingsMenu } from './components/TopbarMenus'
 import { useNotices } from './store/notices'
 import { useAuth, type Role } from './store/auth'
 import { ensurePushPermission } from './push'
+import { applyAccent, loadScale, UI_PREFS_EVENT } from './data/uiPrefs'
 
 function Protected({ allow, children }: { allow: Role[]; children: ReactNode }) {
   const { session, authLoading } = useAuth()
@@ -41,8 +43,21 @@ export default function App() {
   const { composeOpen, draft, openCompose, closeCompose, send, settingsOpen, openSettings, closeSettings, toast } =
     useNotices()
 
+  // 화면 기본 설정(포인트 색상·전체 배율) — 부팅 시 적용 + 설정 변경 즉시 반영.
+  //  배율은 키오스크 화면 제외(키오스크는 자체 배율 컨트롤 보유 — 이중 적용 방지).
+  const [uiScale, setUiScale] = useState(() => loadScale())
+  useEffect(() => {
+    applyAccent()
+    const h = () => setUiScale(loadScale())
+    window.addEventListener(UI_PREFS_EVENT, h)
+    return () => window.removeEventListener(UI_PREFS_EVENT, h)
+  }, [])
+
   return (
-    <div className={`app-shell${isWide ? ' wide' : ''}${isKiosk ? ' kiosk-shell' : ''}${loc.pathname === '/' ? ' home-shell' : ''}`}>
+    <div
+      className={`app-shell${isWide ? ' wide' : ''}${isKiosk ? ' kiosk-shell' : ''}${loc.pathname === '/' ? ' home-shell' : ''}`}
+      style={!isKiosk && uiScale !== 1 ? { zoom: uiScale } : undefined}
+    >
       {!isKiosk && !isLogin && (
         <div className="topbar">
           <Link to="/" className="logo">
@@ -63,6 +78,12 @@ export default function App() {
           )}
           {isWide ? <HeaderWeather /> : <span className="spacer" />}
           <SyncStatus />
+          {session?.role === 'nurse' && (
+            <>
+              <NoticeBell />
+              <SettingsMenu />
+            </>
+          )}
           {session && (
             <span className="user-chip" title={session.org}>
               <i
