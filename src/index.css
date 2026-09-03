@@ -1567,6 +1567,50 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
   0%, 100% { background: var(--surface); }
   50% { background: color-mix(in srgb, var(--danger) 22%, var(--surface)); }
 }
+/* 보건 일일업무 기록 모달 — 캘린더 + 입력칸 2단 */
+.modal.dlg-wide { max-width: 720px; width: min(720px, 94vw); }
+.dl-grid { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; }
+@media (max-width: 640px) { .dl-grid { grid-template-columns: 1fr; } }
+.dl-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding: 0 4px; }
+.dl-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.dl-wd { text-align: center; font-size: 11px; color: var(--text-3); padding: 4px 0; }
+.dl-wd.sun { color: var(--danger); }
+.dl-wd.sat { color: var(--info); }
+.dl-day {
+  position: relative;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.dl-day:hover { background: var(--bg-2, var(--border)); }
+.dl-day.sun { color: var(--danger); }
+.dl-day.sat { color: var(--info); }
+.dl-day.today { font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
+.dl-day.sel { background: var(--info); color: #fff; font-weight: 700; }
+.dl-dot {
+  position: absolute; left: 50%; bottom: 3px; transform: translateX(-50%);
+  width: 4px; height: 4px; border-radius: 50%; background: var(--info);
+}
+.dl-day.sel .dl-dot { background: #fff; }
+.dl-field { margin-top: 10px; }
+.dl-field textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 9px 11px;
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.dl-field textarea:focus { outline: none; border-color: var(--info); }
+
 /* 체온 선택 모달 */
 .temp-readout { text-align: center; font-size: 44px; font-weight: 700; line-height: 1.1; margin: 4px 0 14px; color: var(--text); }
 .temp-readout .temp-unit { font-size: 22px; font-weight: 600; margin-left: 2px; }

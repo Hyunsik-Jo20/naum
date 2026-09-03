@@ -15,6 +15,7 @@ import { flushDue, parentNotifySummary } from '../data/parentNotify'
 import { loadRequests, subscribeRequests, removeRequest, type NurseInboxItem } from '../data/nurseRequest'
 import { staffById } from '../data/teacherRoster'
 import StaffVisitModal from '../components/StaffVisitModal'
+import DailyLogModal from '../components/DailyLogModal'
 import { roster, saveRoster } from '../data/localRoster'
 import { fetchCurrent, type CurrentWeather } from '../data/weatherApi'
 import { deriveAlerts } from '../data/disasters'
@@ -51,11 +52,14 @@ export default function NurseQueue() {
   const [showParentNotify, setShowParentNotify] = useState(false)
   const [showSymptomEdit, setShowSymptomEdit] = useState(false)
   const [showStaffAdd, setShowStaffAdd] = useState(false) // 교직원 접수 모달
+  const [showDailyLog, setShowDailyLog] = useState(false) // 보건 일일업무 기록
   const [parentSummary, setParentSummary] = useState(() => parentNotifySummary())
 
-  // 홈 런처 "증상 목록 편집" 카드에서 진입(?edit=symptoms) — 모달 즉시 열기
+  // 홈 런처 카드에서 진입 — 해당 모달 즉시 열기(?edit=symptoms / ?edit=dailylog)
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('edit') === 'symptoms') setShowSymptomEdit(true)
+    const e = new URLSearchParams(window.location.search).get('edit')
+    if (e === 'symptoms') setShowSymptomEdit(true)
+    else if (e === 'dailylog') setShowDailyLog(true)
   }, [])
   const [, setTick] = useState(0) // 관찰 남은시간 갱신·종료 감지용 주기 리렌더
 
@@ -277,6 +281,9 @@ export default function NurseQueue() {
             </button>
             <button className="btn ghost small" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowSymptomEdit(true)} title="키오스크·접수의 증상 버튼 목록 편집">
               <i className="ti ti-list-details" aria-hidden="true" /> 증상 목록 편집
+            </button>
+            <button className="btn ghost small" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowDailyLog(true)} title="보건교육·보건업무·학교행사 기록 — 보건일지 상단에 자동 반영">
+              <i className="ti ti-notebook" aria-hidden="true" /> 보건 일일업무 기록
             </button>
             <div className="notify-targets" title="접수·처치 알림을 누구에게 보낼지 선택">
               <span className="nt-label"><i className="ti ti-bell" aria-hidden="true" /> 알림 대상</span>
@@ -569,6 +576,7 @@ export default function NurseQueue() {
       {showToken && <LoginTokenModal onClose={() => setShowToken(false)} />}
       {showParentNotify && <ParentNotifyModal onClose={() => { setShowParentNotify(false); setParentSummary(parentNotifySummary()) }} />}
       {showSymptomEdit && <SymptomEditModal onClose={() => setShowSymptomEdit(false)} />}
+      {showDailyLog && <DailyLogModal onClose={() => setShowDailyLog(false)} />}
       {resolveId && (
         <ObserveResolveModal
           name={nameOf(visits.find((v) => v.id === resolveId) ?? ({} as Visit))}

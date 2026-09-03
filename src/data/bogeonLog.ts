@@ -3,6 +3,7 @@
 import type { Sex, Visit } from '../types'
 import { tileById } from '../data/mock'
 import { holidayName, isOperatingDay } from '../data/holidays'
+import { dailyLogOf } from './dailyLog'
 import type { XCell, XRow, XSheet } from './excel'
 
 const WD = ['일', '월', '화', '수', '목', '금', '토']
@@ -158,15 +159,16 @@ function dayBlockCells(blockStart: number, date: Date, entries: LogEntry[], stat
   const dLabel = `${date.getFullYear()} 년 ${date.getMonth() + 1} 월 ${date.getDate()} 일    ${WD[date.getDay()]}요일${hol ? ` (${hol})` : ''}    날씨 : ${weatherStr}`
   put(4, { col: C(0), value: dLabel, across: 33, style: 'date' })
 
-  // 행5~6: 보건교육/보건업무/응급처치및상담/학교행사
+  // 행5~6: 보건교육/보건업무/응급처치및상담/학교행사 — 일일업무 기록(dailyLog)에서 자동 채움
+  const dlog = dailyLogOf(date)
   put(5, { col: C(0), value: '보건교육', across: 3, style: 'sec' })
-  put(5, { col: C(4), across: 11, style: 'secText' })
+  put(5, { col: C(4), value: dlog.edu ?? '', across: 11, style: 'secText' })
   put(5, { col: C(16), value: '보건업무', across: 5, style: 'sec' })
-  put(5, { col: C(22), across: 11, style: 'secText' })
+  put(5, { col: C(22), value: dlog.work ?? '', across: 11, style: 'secText' })
   put(6, { col: C(0), value: '교육청 공지', across: 3, style: 'sec' })
   put(6, { col: C(4), value: eduNotice, across: 11, style: 'secText' })
   put(6, { col: C(16), value: '학교행사', across: 5, style: 'sec' })
-  put(6, { col: C(22), across: 11, style: 'secText' })
+  put(6, { col: C(22), value: dlog.event ?? '', across: 11, style: 'secText' })
 
   // 행7: 응급처치 표 헤더 (응급처치 라벨은 7~37 세로 병합, 한 글자씩 세로 배치+가운데)
   put(7, { col: C(F.LBL), value: '응\n급\n처\n치', down: ENTRY_ROWS, style: 'vlabel' })
