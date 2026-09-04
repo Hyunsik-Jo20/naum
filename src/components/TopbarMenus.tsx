@@ -12,6 +12,7 @@ import { ACCENTS, SCALES, loadAccent, loadScale, setAccent, setScale } from '../
 import LoginTokenModal from './LoginTokenModal'
 import SymptomEditModal from './SymptomEditModal'
 import ParentNotifyModal from './ParentNotifyModal'
+import RecoverVisitsModal from './RecoverVisitsModal'
 
 function hhmm(ts: number): string {
   const d = new Date(ts)
@@ -91,6 +92,7 @@ export function SettingsMenu() {
   const [showToken, setShowToken] = useState(false)
   const [showSymptomEdit, setShowSymptomEdit] = useState(false)
   const [showParentNotify, setShowParentNotify] = useState(false)
+  const [showRecover, setShowRecover] = useState(false)
 
   const [notifyT, setNotifyT] = useState(() => loadNotifyTargets())
   const [parentSummary, setParentSummary] = useState(() => parentNotifySummary())
@@ -174,6 +176,9 @@ export function SettingsMenu() {
               <i className="ti ti-refresh-alert" aria-hidden="true" /> 전송 실패 기록 복구 · {deadCount()}건
             </button>
           )}
+          <button className="tp-row" onClick={() => { setShowRecover(true); setOpen(false) }} title="담임 알림의 암호화 흔적에서 오늘 유실된 접수를 찾아 복원">
+            <i className="ti ti-zoom-question" aria-hidden="true" /> 잃어버린 접수 찾기 (오늘)
+          </button>
           <button className="tp-row" onClick={() => setShowToken(true)}>
             <i className="ti ti-key" aria-hidden="true" /> 로그인 토큰 발급
           </button>
@@ -227,6 +232,7 @@ export function SettingsMenu() {
       )}
 
       {showToken && <LoginTokenModal onClose={() => setShowToken(false)} />}
+      {showRecover && <RecoverVisitsModal onClose={() => setShowRecover(false)} />}
       {showSymptomEdit && <SymptomEditModal onClose={() => setShowSymptomEdit(false)} />}
       {showParentNotify && <ParentNotifyModal onClose={() => { setShowParentNotify(false); setParentSummary(parentNotifySummary()) }} />}
     </div>

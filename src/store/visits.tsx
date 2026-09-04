@@ -44,6 +44,8 @@ interface VisitsCtx {
   addVisit: (student: Student, symptomTileIds: string[]) => Visit
   /** 교직원 접수(콘솔 수동 전용) — 담임·학부모 알림 없음, 학생 통계에서 제외(별도 집계). */
   addStaffVisit: (staff: Staff, sex: '남' | '여', symptomTileIds: string[]) => Visit
+  /** 유실 접수 복원 — 릴레이 흔적 등에서 재구성해 당시 시각의 완료 방문으로 추가(알림 없음). */
+  restoreVisit: (student: Student, symptomTileIds: string[], createdAt: number) => Visit
   startTreating: (id: string) => void
   completeVisit: (id: string, patch: Partial<Visit>) => void
   updateVisit: (id: string, patch: Partial<Visit>) => void
@@ -445,6 +447,29 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
               body: JSON.stringify({ action: 'notify', schoolId: schoolId() }),
             }).catch(() => {})
         } else if (modeRef.current === 'backend') void apiCreateVisit(v, staff.id)
+        return v
+      },
+      // 유실 접수 복원 — 당시 접수 시각으로 완료 방문 생성. 담임·학부모 알림/푸시 재발송 없음.
+      restoreVisit: (student, symptomTileIds, createdAt) => {
+        const id = `v-${schoolId()}-${WIN}-${Date.now().toString(36)}-${++counter}`
+        const v: Visit = {
+          id,
+          grade: student.grade,
+          sex: student.sex,
+          symptomTileIds,
+          status: 'done',
+          ticket: 0,
+          diseases: [],
+          treatments: [],
+          outcome: '교실 복귀',
+          createdAt,
+          treatedAt: createdAt,
+        }
+        touch(id)
+        setStore((p) => ({ visits: [...p.visits, v], links: { ...p.links, [id]: student.id } }))
+        if (modeRef.current === 'supabase')
+          offline.run({ type: 'createVisit', visit: v, studentId: student.id, schoolId: schoolId() })
+        else if (modeRef.current === 'backend') void apiCreateVisit(v, student.id)
         return v
       },
       startTreating: (id) => {
