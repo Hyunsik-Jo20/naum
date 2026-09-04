@@ -24,7 +24,17 @@ export function studentsInClass(cls: string): Student[] {
 }
 
 export function findStudent(id: string): Student | undefined {
-  return students.find((s) => s.id === id)
+  const exact = students.find((s) => s.id === id)
+  if (exact) return exact
+  // 기기별 명부 업로드본이 다르면 id의 행번호 부분이 어긋나 정확 일치가 실패한다
+  //  (키오스크 태블릿과 콘솔 PC의 업로드 시점 차이 → 일부 학생이 '학생'으로 표시되던 원인).
+  //  id에 박힌 학년·반·번호는 업로드본과 무관하게 같으므로 그것으로 복원한다.
+  const m = /^u_(\d+)_(\d+)_(\d+)/.exec(id) ?? /^s(\d+)_(\d+)_(\d+)$/.exec(id)
+  if (m) {
+    const [g, c, n] = [Number(m[1]), Number(m[2]), Number(m[3])]
+    return students.find((s) => s.grade === g && s.classNo === c && s.number === n)
+  }
+  return undefined
 }
 
 /* ───────────── 증상·병명·처치 코드 (서버에도 가는 비식별) ───────────── */

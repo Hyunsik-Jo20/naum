@@ -79,6 +79,35 @@ export default function RosterManager() {
     URL.revokeObjectURL(url)
   }
 
+  // 전학생 등 학생 직접 추가 — 명부 재업로드 없이 한 명씩(로컬 저장, 저장 시 새로고침)
+  const [addG, setAddG] = useState('')
+  const [addC, setAddC] = useState('')
+  const [addN, setAddN] = useState('')
+  const [addName, setAddName] = useState('')
+  const [addSex, setAddSex] = useState<'남' | '여'>('남')
+  const [addPhone, setAddPhone] = useState('')
+  function addStudent() {
+    const g = Number(addG)
+    const c = Number(addC)
+    const n = Number(addN)
+    const name = addName.trim()
+    if (!name || !g || !c || !n) { alert('학년·반·번호·이름을 모두 입력하세요.'); return }
+    const dup = roster.find((s) => s.grade === g && s.classNo === c && s.number === n)
+    if (dup && !confirm(`${g}-${c} ${n}번에 이미 ${dup.name} 학생이 있습니다. 새 정보로 교체할까요?`)) return
+    const st: Student = {
+      id: `u_${g}_${c}_${n}_t${Date.now()}`,
+      name,
+      grade: g,
+      classNo: c,
+      number: n,
+      sex: addSex,
+      guardianPhone: addPhone.trim() || undefined,
+    }
+    saveRosterDirect(dup ? roster.map((s) => (s === dup ? st : s)) : [...roster, st])
+    alert(`${name} 학생(${g}-${c} ${n}번)을 명부에 추가했습니다. 새로고침합니다.`)
+    window.location.reload()
+  }
+
   // 요보호 학생 관리 — 현재 명부에서 검색해 사유 지정/해제(로컬 암호화 저장, 저장 시 새로고침)
   const [careQ, setCareQ] = useState('')
   const [careSel, setCareSel] = useState<Student | null>(null)
@@ -250,6 +279,40 @@ export default function RosterManager() {
           {preview.length > 12 && <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>… 외 {preview.length - 12}명</div>}
         </div>
       )}
+
+      {/* ── 전학생 등 직접 추가 ── */}
+      <div className="card" style={{ marginTop: 24, marginBottom: 16 }}>
+        <div className="sec-label" style={{ marginBottom: 8 }}>
+          <i className="ti ti-user-plus" style={{ verticalAlign: -2 }} aria-hidden="true" /> 전학생 등 학생 직접 추가
+        </div>
+        <p className="muted" style={{ fontSize: 13, marginTop: 0, lineHeight: 1.7 }}>
+          명부를 다시 올리지 않고 한 명씩 추가합니다(전학·누락 보완).
+          담임이 보낸 <b>전학 안내</b>는 콘솔의 "보건실 요청" 카드에서도 바로 추가할 수 있습니다.
+        </p>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <label className="login-field" style={{ width: 64 }}>학년
+            <input inputMode="numeric" value={addG} placeholder="3" onChange={(e) => setAddG(e.target.value)} />
+          </label>
+          <label className="login-field" style={{ width: 64 }}>반
+            <input inputMode="numeric" value={addC} placeholder="2" onChange={(e) => setAddC(e.target.value)} />
+          </label>
+          <label className="login-field" style={{ width: 64 }}>번호
+            <input inputMode="numeric" value={addN} placeholder="15" onChange={(e) => setAddN(e.target.value)} />
+          </label>
+          <label className="login-field" style={{ flex: 1, minWidth: 110 }}>이름
+            <input value={addName} placeholder="홍길동" onChange={(e) => setAddName(e.target.value)} />
+          </label>
+          <label className="login-field" style={{ width: 76 }}>성별
+            <select value={addSex} onChange={(e) => setAddSex(e.target.value as '남' | '여')}>
+              <option>남</option><option>여</option>
+            </select>
+          </label>
+          <label className="login-field" style={{ flex: 1, minWidth: 140 }}>보호자 연락처(선택)
+            <input inputMode="tel" value={addPhone} placeholder="010-0000-0000" onChange={(e) => setAddPhone(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addStudent()} />
+          </label>
+          <button className="btn" onClick={addStudent}><i className="ti ti-plus" aria-hidden="true" /> 추가</button>
+        </div>
+      </div>
 
       {/* ── 요보호 학생 관리 ── */}
       <div className="card" style={{ marginTop: 24, marginBottom: 16 }}>
