@@ -88,6 +88,18 @@ export const deadCount = () => readArr(DEAD).length
 /** 큐에 재시도(실패 이력) 중인 항목이 있는지 — 상단바 표시용. */
 export const hasFailures = () => load().some((e) => e.tries > 0)
 
+/** 전송 실패로 격리된(dead-letter) 항목을 큐로 되돌려 재시도. 되살린 개수 반환.
+ *  키오스크·콘솔에서 업로드가 계속 실패해 격리된 접수/처치 기록의 복구 경로. */
+export function retryDead(): number {
+  const dead = readArr(DEAD) as { op?: OutboxOp }[]
+  const ops = dead.filter((d) => d && d.op && typeof d.op.type === 'string').map((d) => d.op as OutboxOp)
+  if (ops.length === 0) return 0
+  try { localStorage.removeItem(DEAD) } catch { /* ignore */ }
+  save([...load(), ...ops.map((op) => ({ id: newId(), op, tries: 0 }))])
+  void flush()
+  return ops.length
+}
+
 /** 아직 업로드되지 않은(큐 대기) 방문 id 집합 — 재동기화 때 로컬 상태 보호용. */
 export function pendingVisitIds(): Set<string> {
   const s = new Set<string>()

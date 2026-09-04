@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useNotices } from '../store/notices'
 import { loadNotifyTargets, saveNotifyTargets } from '../data/notifyTargets'
+import { deadCount, retryDead } from '../data/offline'
 import { parentNotifySummary } from '../data/parentNotify'
 import { remotePushSupported, remotePushActive, subscribeRemotePush, unsubscribeRemotePush } from '../push'
 import { ACCENTS, SCALES, loadAccent, loadScale, setAccent, setScale } from '../data/uiPrefs'
@@ -159,6 +160,20 @@ export function SettingsMenu() {
           )}
 
           <div className="tp-sec">관리</div>
+          {deadCount() > 0 && (
+            <button
+              className="tp-row"
+              style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+              title="업로드가 계속 실패해 보관함에 격리된 접수·처치 기록을 다시 전송합니다"
+              onClick={() => {
+                const n = retryDead()
+                alert(n ? `전송 실패 기록 ${n}건을 다시 전송합니다. 잠시 후 대기열에 나타납니다.` : '재시도할 기록이 없습니다.')
+                setOpen(false)
+              }}
+            >
+              <i className="ti ti-refresh-alert" aria-hidden="true" /> 전송 실패 기록 복구 · {deadCount()}건
+            </button>
+          )}
           <button className="tp-row" onClick={() => setShowToken(true)}>
             <i className="ti ti-key" aria-hidden="true" /> 로그인 토큰 발급
           </button>

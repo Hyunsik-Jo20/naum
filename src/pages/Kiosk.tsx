@@ -8,7 +8,7 @@ import {
   symptomTiles,
 } from '../data/mock'
 import { useVisits } from '../store/visits'
-import { SUPABASE_ENABLED } from '../data/supabaseClient'
+import { SUPABASE_ENABLED, supabase } from '../data/supabaseClient'
 import { hasSchool } from '../data/school'
 import { sendNurseRequest } from '../data/nurseRequest'
 import { syncSymptomsFromCloud } from '../data/symptomsSync'
@@ -45,6 +45,14 @@ export default function Kiosk() {
   const [ticket, setTicket] = useState<number>(0)
   const [byQr, setByQr] = useState(false)
   const visualStep = step === 'symptom' ? 'symptom' : step === 'id' && pickedClass ? 'roster' : 'welcome'
+
+  // 이 기기의 보건교사 인증이 풀리면 접수의 암호화 이름 링크가 다른 기기에서 복원되지 않을 수
+  //  있다 — 학교 연결 상태인데 세션이 없으면 상단에 관리자용 안내(학생 접수는 계속 가능).
+  const [authWarn, setAuthWarn] = useState(false)
+  useEffect(() => {
+    if (!SUPABASE_ENABLED || !hasSchool() || !supabase) return
+    void supabase.auth.getSession().then(({ data }) => setAuthWarn(!data.session))
+  }, [])
 
   // 콘솔에서 편집한 증상 목록을 키오스크가 상시 반영 — 대기(환영) 화면에 있을 때만
   //  클라우드와 비교해, 바뀌었으면 새로고침(접수 진행 중에는 건드리지 않음).
@@ -126,6 +134,12 @@ export default function Kiosk() {
         </div>
       </div>
 
+      {authWarn && (
+        <div className="route-note" style={{ margin: '0 auto 12px', maxWidth: 720 }}>
+          <i className="ti ti-lock-open" aria-hidden="true" /> (관리자 안내) 이 기기의 보건교사 로그인이 풀려 있습니다.
+          접수는 계속 되지만 콘솔에서 이름 복원이 안 될 수 있으니, 보건교사 로그인을 1회 해주세요.
+        </div>
+      )}
       {/* 멀티테넌트: 이 기기에 학교가 아직 바인딩되지 않음(보건교사 로그인 1회 필요) — 접수는 막지 않되 데모로 기록됨을 안내 */}
       {SUPABASE_ENABLED && !hasSchool() && (
         <div className="route-note" style={{ margin: '0 auto 12px', maxWidth: 720 }}>

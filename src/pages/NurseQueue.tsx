@@ -201,7 +201,10 @@ export default function NurseQueue() {
   }
 
   function nameOf(v: Visit): string {
-    return studentOf(v.id)?.name ?? (v.isStaff ? '교직원' : '학생')
+    const s = studentOf(v.id)
+    if (s) return s.name
+    // 이름 미복원(이 기기에 명부 없음 등) — 비식별 정보로라도 식별 가능하게
+    return v.isStaff ? '교직원' : `${v.grade}학년 ${v.sex}`
   }
   function clsOf(v: Visit): string {
     if (v.isStaff) {
@@ -209,7 +212,7 @@ export default function NurseQueue() {
       return sf ? (staffById(sf.id)?.role ?? '교직원') : '교직원'
     }
     const s = studentOf(v.id)
-    return s ? classLabel(s) : ''
+    return s ? classLabel(s) : `대기번호 ${v.ticket}번`
   }
   // 요보호 표시(카드용) — 사유는 title로
   function careOf(v: Visit): string | undefined {
@@ -221,6 +224,21 @@ export default function NurseQueue() {
       <div className="queue-3">
         {/* 좌측 1/4 — 현황 요약 + 대기자 */}
         <div>
+          {/* 이름 미복원 감지 — 이 기기에 명부가 없거나 키오스크 기기 인증이 풀린 경우 안내 */}
+          {(() => {
+            const unnamed = todays.filter((v) => !v.isStaff && !studentOf(v.id)).length
+            if (unnamed === 0) return null
+            return (
+              <div className="route-note" style={{ marginBottom: 10 }}>
+                <i className="ti ti-user-question" aria-hidden="true" /> 이름을 복원하지 못한 접수 {unnamed}건 —{' '}
+                {roster.length === 0 ? (
+                  <>이 기기에 <b>학생 명부가 없습니다</b>. 명부 관리에서 업로드하면 이름이 복원됩니다.</>
+                ) : (
+                  <>이 기기의 명부와 접수 기기의 명부가 다르거나, 키오스크 기기의 보건교사 로그인이 풀렸을 수 있습니다.</>
+                )}
+              </div>
+            )
+          })()}
           <div className="nq-summary">
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>보건실 현황</h2>
             <span className="muted" style={{ fontSize: 12 }}>
