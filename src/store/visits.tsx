@@ -258,13 +258,20 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
         const pending = offline.pendingVisitIds()
         const keepLocal = (id: string) =>
           pending.has(id) || Date.now() - (touchRef.current[id] ?? 0) < 15000
+        // '완료'는 최종 상태 — 서버가 뒤처져 있으면(완료 patch 업로드 실패 등) 로컬 완료를
+        //  유지하고 서버로 재전송한다. 완료가 '처치 중'으로 되돌아가는 회귀 방지.
+        const stale: Visit[] = []
         setStore((p) => {
           const serverById = new Map(visits.map((v) => [v.id, v]))
           const merged: Visit[] = []
           for (const v of p.visits) {
             const sv = serverById.get(v.id)
             if (sv) {
-              merged.push(keepLocal(v.id) ? v : sv)
+              if (keepLocal(v.id)) merged.push(v)
+              else if (v.status === 'done' && sv.status !== 'done') {
+                merged.push(v)
+                stale.push(v)
+              } else merged.push(sv)
               serverById.delete(v.id)
             } else if (keepLocal(v.id)) {
               merged.push(v) // 업로드 전(큐 대기·전송 중) — 보존
@@ -275,6 +282,24 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
           serverById.forEach((v) => { if (!keepLocal(v.id)) merged.push(v) })
           return { visits: merged, links: { ...p.links, ...cloudLinks } }
         })
+        // 뒤처진 서버에 완료 상태 재전송(중복 방지 위해 방문당 이번 회차 1회)
+        for (const v of new Map(stale.map((x) => [x.id, x])).values()) {
+          offline.run({
+            type: 'patchVisit',
+            id: v.id,
+            patch: {
+              status: 'done',
+              treatedAt: v.treatedAt ?? Date.now(),
+              outcome: v.outcome,
+              diseases: v.diseases,
+              treatments: v.treatments,
+              escort: v.escort,
+              transport: v.transport,
+              guardianHandoff: v.guardianHandoff,
+              observeUntil: v.observeUntil,
+            },
+          })
+        }
       } catch {
         /* 무시(다음 트리거에 재시도) */
       } finally {

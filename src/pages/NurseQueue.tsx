@@ -360,6 +360,19 @@ export default function NurseQueue() {
                   {nameOf(v)}
                 </button>
               ))}
+              {treating.length > 1 && (
+                <button
+                  className="btn ghost small"
+                  style={{ marginLeft: 'auto' }}
+                  title="처치 중으로 남아 있는 학생을 한 번에 '교실 복귀' 완료 처리합니다. 개별 기록은 완료 카드에서 사후 보완으로 수정할 수 있어요."
+                  onClick={() => {
+                    if (confirm(`처치 중 ${treating.length}명을 모두 '교실 복귀'로 완료 처리할까요?\n(병명·처치 등은 완료 카드를 눌러 사후 보완으로 채울 수 있습니다)`))
+                      treating.forEach((v) => completeVisit(v.id, { outcome: '교실 복귀' }))
+                  }}
+                >
+                  <i className="ti ti-checks" aria-hidden="true" /> 모두 완료
+                </button>
+              )}
             </div>
           )}
 
