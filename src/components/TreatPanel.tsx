@@ -7,6 +7,7 @@ import {
   recentVisitHint,
   suggestDiseases,
   tileById,
+  symptomTiles,
 } from '../data/mock'
 import { loadTreatments, saveTreatments } from '../data/treatments'
 import { aiTriage, aiConfigured } from '../data/aiTriage'
@@ -85,6 +86,10 @@ export default function TreatPanel({
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false)
   const [tempOpen, setTempOpen] = useState(false)
   const [observeOpen, setObserveOpen] = useState(false)
+  const [symOpen, setSymOpen] = useState(false) // 증상 추가·수정 패널(키오스크 오입력 정정)
+  const [timeOpen, setTimeOpen] = useState(false) // 입실·퇴실 시각 수정(당일 누락분 사후 입력)
+  const [timeIn, setTimeIn] = useState('')
+  const [timeOut, setTimeOut] = useState('')
   const [bodyMapKind, setBodyMapKind] = useState<string | null>(null) // 부위 선택 대상 처치(지혈/밴드·소독)
   const [medOpen, setMedOpen] = useState(false) // 투약 약 선택 모달
   const [supplyOpen, setSupplyOpen] = useState(false) // 위생용품·비품 선택 모달
@@ -244,6 +249,37 @@ export default function TreatPanel({
     (x) => !treatOrder.includes(x) && !treatOrder.some((t) => x.startsWith(`${t} (`)) && !x.startsWith(TEMP_LABEL),
   )
 
+  // 학생이 키오스크에서 잘못 고른 증상 정정 — 즉시 저장(보건일지·통계에 반영).
+  function setSymptoms(ids: string[]) {
+    updateVisit(visit.id, { symptomTileIds: ids })
+  }
+
+  // 입실(접수)·퇴실 시각 수정 — 바빠서 당일 입력을 못 한 방문을 실제 시각으로 기록.
+  const toLocalInput = (ts: number) => {
+    const d = new Date(ts)
+    const z = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`
+  }
+  function openTimeEdit() {
+    setTimeIn(toLocalInput(visit.createdAt))
+    setTimeOut(visit.treatedAt ? toLocalInput(visit.treatedAt) : '')
+    setTimeOpen(true)
+  }
+  function saveTimes() {
+    const c = new Date(timeIn).getTime()
+    if (!Number.isFinite(c)) { alert('입실 시각이 올바르지 않습니다.'); return }
+    const patch: Partial<Visit> = { createdAt: c }
+    if (timeOut) {
+      const o = new Date(timeOut).getTime()
+      if (!Number.isFinite(o)) { alert('퇴실 시각이 올바르지 않습니다.'); return }
+      if (o < c) { alert('퇴실 시각이 입실 시각보다 빠릅니다.'); return }
+      patch.treatedAt = o
+    }
+    updateVisit(visit.id, patch)
+    setTimeOpen(false)
+    alert('시각을 수정했습니다. 보건일지·통계는 입실(접수) 날짜 기준으로 반영됩니다.')
+  }
+
   // 병원 이송·귀가 인계서 — 병원/보호자에게 전달할 처치 확인서를 브라우저 인쇄(종이 또는 PDF 저장).
   //  개인정보는 로컬(이 기기)에서만 조합되어 인쇄 — 클라우드를 거치지 않음.
   function printHandoff() {
@@ -395,14 +431,16 @@ export default function TreatPanel({
             <i className="ti ti-printer" aria-hidden="true" /> 기록 출력
           </button>
           {isDone ? (
-            <span className="pill success" title="입실(접수)·퇴실(처치 종료) 시각">
+            <button className="pill success pill-btn" title="눌러서 입실·퇴실 시각 수정" onClick={openTimeEdit}>
               <i className="ti ti-check" aria-hidden="true" /> 입실 {fmtTime(visit.createdAt)} → 퇴실{' '}
               {visit.treatedAt ? fmtTime(visit.treatedAt) : '—'}
-            </span>
+              <i className="ti ti-pencil" aria-hidden="true" style={{ marginLeft: 4, opacity: 0.7 }} />
+            </button>
           ) : (
-            <span className="pill info">
+            <button className="pill info pill-btn" title="눌러서 접수(입실) 시각 수정" onClick={openTimeEdit}>
               <i className="ti ti-clock" aria-hidden="true" /> 접수 {fmtTime(visit.createdAt)}
-            </span>
+              <i className="ti ti-pencil" aria-hidden="true" style={{ marginLeft: 4, opacity: 0.7 }} />
+            </button>
           )}
           {!isDone && (
             <button
@@ -421,23 +459,76 @@ export default function TreatPanel({
         </div>
       </div>
 
+      {timeOpen && (
+        <div className="time-edit">
+          <label className="login-field">
+            입실(접수) 시각
+            <input type="datetime-local" value={timeIn} onChange={(e) => setTimeIn(e.target.value)} />
+          </label>
+          <label className="login-field">
+            퇴실(종료) 시각 <span className="muted-inline">· 비우면 미기록</span>
+            <input type="datetime-local" value={timeOut} onChange={(e) => setTimeOut(e.target.value)} />
+          </label>
+          <div className="row" style={{ gap: 6 }}>
+            <button className="btn small" onClick={saveTimes}>
+              <i className="ti ti-check" aria-hidden="true" /> 시각 저장
+            </button>
+            <button className="btn ghost small" onClick={() => setTimeOpen(false)}>취소</button>
+          </div>
+          <p className="muted" style={{ fontSize: 11, margin: '2px 0 0', lineHeight: 1.5, width: '100%' }}>
+            바빠서 당일 입력을 못 한 방문을 실제 시각으로 고칠 수 있어요. 보건일지·통계는 <b>입실(접수) 날짜</b>
+            기준이라, 날짜를 바꾸면 그날 일지로 옮겨집니다.
+          </p>
+        </div>
+      )}
+
       {isDone && (
         <div className="followup-banner">
           <i className="ti ti-info-circle" aria-hidden="true" /> <strong>{visit.outcome ?? '교실 복귀'}</strong>로 종료됨 · 사후 처치를 추가·수정할 수 있어요.
         </div>
       )}
 
+      {/* 학생이 키오스크에서 잘못 고른 증상 정정 — 칩을 누르면 제거, "증상 수정"으로 추가.
+          변경은 즉시 저장되어 보건일지·통계에 반영된다(현장 요청). */}
       <div className="chips" style={{ marginBottom: 12 }}>
         {visit.symptomTileIds.map((tid) => {
           const t = tileById(tid)
-          if (!t) return null
           return (
-            <span key={tid} className="chip plain">
-              <i className={`ti ${t.icon}`} aria-hidden="true" /> {t.label}
-            </span>
+            <button
+              key={tid}
+              className="chip plain sym-chip"
+              title="눌러서 이 증상 제거"
+              onClick={() => setSymptoms(visit.symptomTileIds.filter((x) => x !== tid))}
+            >
+              <i className={`ti ${t?.icon ?? 'ti-medical-cross'}`} aria-hidden="true" /> {t?.label ?? tid}
+              <i className="ti ti-x sym-x" aria-hidden="true" />
+            </button>
           )
         })}
+        <button className={`chip ${symOpen ? 'on' : ''}`} onClick={() => setSymOpen((v) => !v)} title="증상 추가·수정">
+          <i className={`ti ${symOpen ? 'ti-chevron-up' : 'ti-plus'}`} aria-hidden="true" />
+          증상 {visit.symptomTileIds.length ? '수정' : '추가'}
+        </button>
       </div>
+      {symOpen && (
+        <div className="sym-picker">
+          {symptomTiles.map((t) => {
+            const on = visit.symptomTileIds.includes(t.id)
+            return (
+              <button
+                key={t.id}
+                className={`chip ${on ? 'on' : ''}`}
+                onClick={() =>
+                  setSymptoms(on ? visit.symptomTileIds.filter((x) => x !== t.id) : [...visit.symptomTileIds, t.id])
+                }
+              >
+                {on && <i className="ti ti-check" aria-hidden="true" />}
+                <i className={`ti ${t.icon}`} aria-hidden="true" /> {t.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       <div className="row between" style={{ marginBottom: 10 }}>
         <div className="sec-label">

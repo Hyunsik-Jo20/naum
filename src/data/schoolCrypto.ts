@@ -103,6 +103,36 @@ async function tokenOf(ns: string): Promise<string> {
 }
 
 export const schoolLinkKey = () => keyOf('links')
+
+/** 'links' 스코프 키 후보(복호 전용) — 서버·캐시 발급 키와 로컬 파생 키를 모두 반환.
+ *  배경: 서버 키 발급이 실패하면(세션 갱신 지연·403·네트워크) 로컬 파생 키로 폴백되므로,
+ *  저장 시점에 따라 두 키로 암호화된 데이터가 섞일 수 있다. 이때 한쪽 키로만 복호하면
+ *  명부가 통째로 '빈 값'으로 보였다(아침마다 초기화되는 것처럼). 복호는 모든 후보로 시도한다. */
+export async function schoolLinkKeyCandidates(): Promise<CryptoKey[]> {
+  const b64s: string[] = []
+  try {
+    const res = await fetchResource('links', 'key')
+    if (res.key) b64s.push(res.key)
+  } catch {
+    /* 서버 실패 — 로컬 후보로 계속 */
+  }
+  try {
+    b64s.push(await localKeyB64('links'))
+  } catch {
+    /* ignore */
+  }
+  const keys: CryptoKey[] = []
+  for (const b of [...new Set(b64s)]) {
+    try {
+      keys.push(
+        await crypto.subtle.importKey('raw', fromB64(b) as unknown as BufferSource, 'AES-GCM', false, ['encrypt', 'decrypt']),
+      )
+    } catch {
+      /* 손상된 캐시 값 — 건너뜀 */
+    }
+  }
+  return keys
+}
 export const schoolClassKey = (grade: number, classNo: number) => keyOf(`class:${grade}-${classNo}`)
 export const schoolStudentKey = (studentId: string) => keyOf(`student:${studentId}`)
 export const schoolClassToken = (grade: number, classNo: number) => tokenOf(`class:${grade}-${classNo}`)

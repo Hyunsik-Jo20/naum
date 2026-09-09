@@ -10,6 +10,7 @@ import SymptomEditModal from '../components/SymptomEditModal'
 import { flushDue } from '../data/parentNotify'
 import { loadRequests, subscribeRequests, removeRequest, type NurseInboxItem } from '../data/nurseRequest'
 import { staffById } from '../data/teacherRoster'
+import { secureLockedKeys } from '../data/secureStore'
 import StaffVisitModal from '../components/StaffVisitModal'
 import DailyLogModal from '../components/DailyLogModal'
 import { roster, saveRoster } from '../data/localRoster'
@@ -224,6 +225,14 @@ export default function NurseQueue() {
       <div className="queue-3">
         {/* 좌측 1/4 — 현황 요약 + 대기자 */}
         <div>
+          {/* 로컬 암호화 데이터 잠김 — 키 준비 전이라 명부·기록이 빈 값으로 보이는 상태 */}
+          {secureLockedKeys().length > 0 && (
+            <div className="route-note" style={{ marginBottom: 10, borderColor: 'var(--danger)' }}>
+              <i className="ti ti-lock" aria-hidden="true" /> <b>저장된 명부·기록을 여는 중입니다.</b> 지금 보이는 빈 목록은
+              실제로 지워진 것이 아닙니다. 잠시 기다리면 자동으로 복구·새로고침되며, 계속 비어 있으면 로그인 상태를
+              확인하고 새로고침하세요. <span className="muted-inline">(이 상태에서 명부를 다시 올려도 기존 데이터는 백업됩니다)</span>
+            </div>
+          )}
           {/* 이름 미복원 감지 — 이 기기에 명부가 없거나 키오스크 기기 인증이 풀린 경우 안내 */}
           {(() => {
             const unnamed = todays.filter((v) => !v.isStaff && !studentOf(v.id)).length

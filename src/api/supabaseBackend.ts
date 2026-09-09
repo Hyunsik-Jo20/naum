@@ -79,6 +79,7 @@ function toRow(v: Visit, sch: string): Row & { school_id: string } {
 // 비식별 patch → 컬럼 patch (PII 키는 매핑 자체가 없어 전송 불가)
 function patchToRow(p: Partial<Visit>): Record<string, unknown> {
   const r: Record<string, unknown> = {}
+  if (p.symptomTileIds !== undefined) r.symptom_tile_ids = p.symptomTileIds // 키오스크 오입력 정정
   if (p.status !== undefined) r.status = p.status
   if (p.ticket !== undefined) r.ticket = p.ticket
   if (p.diseases !== undefined) r.diseases = p.diseases
@@ -87,6 +88,7 @@ function patchToRow(p: Partial<Visit>): Record<string, unknown> {
   if (p.escort !== undefined) r.escort = p.escort
   if (p.transport !== undefined) r.transport = p.transport
   if (p.guardianHandoff !== undefined) r.guardian_handoff = p.guardianHandoff
+  if (p.createdAt !== undefined) r.created_at = p.createdAt // 누락 접수 사후 입력 시 시각 수정
   if (p.calledAt !== undefined) r.called_at = p.calledAt
   if (p.treatedAt !== undefined) r.treated_at = p.treatedAt
   if (p.observeUntil !== undefined) r.observe_until = p.observeUntil

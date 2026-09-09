@@ -1567,6 +1567,37 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
   0%, 100% { background: var(--surface); }
   50% { background: color-mix(in srgb, var(--danger) 22%, var(--surface)); }
 }
+/* 처치 화면 — 증상 정정(키오스크 오입력) · 입퇴실 시각 수정 */
+.sym-chip { cursor: pointer; }
+.sym-chip:hover { border-color: var(--danger); color: var(--danger); }
+.sym-x { margin-left: 4px; opacity: 0.5; font-size: 12px; }
+.sym-chip:hover .sym-x { opacity: 1; }
+.sym-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 9px;
+  border: 1px dashed var(--border-2);
+  border-radius: 10px;
+  background: var(--bg-2, transparent);
+}
+.pill-btn { border: 0; cursor: pointer; font: inherit; }
+.pill-btn:hover { filter: brightness(0.96); }
+.time-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--info);
+  border-radius: 12px;
+  background: var(--info-bg);
+}
+.time-edit .login-field { margin: 0; font-size: 12px; }
+.time-edit input { font-size: 13px; }
+
 /* 상단바 아이콘 메뉴(🔔 알림 / ⚙ 설정) — 이름 왼쪽에 나란히 */
 .topbar-menu { position: relative; }
 .topbar-icon {
