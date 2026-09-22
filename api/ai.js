@@ -145,10 +145,24 @@ export default async function handler(req, res) {
   }
   const enabled = !!cfg.apiKey && !!cfg.model && (cfg.provider !== 'custom' || !!cfg.baseUrl)
 
-  // GET = 가용성 확인. 키는 절대 돌려주지 않고 "쓸 수 있는지 + 모델명"만.
+  // 왜 못 쓰는지 — **이름만** 알려 준다(값은 절대 노출하지 않음).
+  //  Vercel에 넣었는데 enabled:false로 보일 때 원인을 바로 짚기 위한 진단.
+  const missing = []
+  if (!cfg.apiKey) missing.push('AI_API_KEY')
+  if (!cfg.model) missing.push('AI_MODEL')
+  if (cfg.provider === 'custom' && !cfg.baseUrl) missing.push('AI_BASE_URL')
+  if (!process.env.SUPABASE_URL) missing.push('SUPABASE_URL')
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY')
+
+  // GET = 가용성 확인. 키는 절대 돌려주지 않고 "쓸 수 있는지 + 모델명 + 빠진 변수 이름"만.
   if (req.method === 'GET') {
     res.setHeader('Cache-Control', 'no-store')
-    return res.status(200).json({ enabled, provider: enabled ? cfg.provider : null, model: enabled ? cfg.model : null })
+    return res.status(200).json({
+      enabled,
+      provider: enabled ? cfg.provider : null,
+      model: enabled ? cfg.model : null,
+      missing,
+    })
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' })
   if (!originAllowed(req)) return res.status(403).json({ error: 'forbidden origin' })
