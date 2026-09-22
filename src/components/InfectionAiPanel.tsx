@@ -9,8 +9,8 @@
 //   ② 학교는 익명 코드로 보내고 화면에서만 실명으로 되돌린다.
 //   ③ 입력에 없는 수치·보내지 않은 학교명이 답에 있으면 경고를 띄운다(auditAiOutput).
 //   ④ 공지로 옮길 때 "AI 보조 해석" 고지를 자동으로 앞에 붙인다.
-import { useMemo, useState } from 'react'
-import { callAi, isConfigured, loadAiConfig } from '../data/ai'
+import { useEffect, useMemo, useState } from 'react'
+import { callAiSmart, fetchServerAi, isConfigured, loadAiConfig, type ServerAiStatus } from '../data/ai'
 import { auditAiOutput, buildInfectionBrief, revealCodes } from '../data/infectionBrief'
 import type { EduSchoolStats, EduVisitRow } from '../data/eduLive'
 import type { SurvParams } from '../data/surveillance'
@@ -33,7 +33,16 @@ export default function InfectionAiPanel({
 }) {
   const { openCompose } = useNotices()
   const cfg = loadAiConfig()
-  const configured = isConfigured(cfg)
+  const localKey = isConfigured(cfg)
+
+  // 서버 키(/api/ai)가 있으면 그쪽을 쓴다 — 브라우저에 키를 두지 않기 위해.
+  const [serverAi, setServerAi] = useState<ServerAiStatus | null>(null)
+  useEffect(() => {
+    let ok = true
+    void fetchServerAi().then((v) => { if (ok) setServerAi(v) })
+    return () => { ok = false }
+  }, [])
+  const canRun = !!serverAi?.enabled || localKey
 
   const [loading, setLoading] = useState(false)
   const [answer, setAnswer] = useState('')
@@ -41,6 +50,7 @@ export default function InfectionAiPanel({
   const [error, setError] = useState('')
   const [showInput, setShowInput] = useState(false)
   const [ranAt, setRanAt] = useState<number | null>(null)
+  const [via, setVia] = useState<{ via: 'server' | 'local'; model: string } | null>(null)
 
   const brief = useMemo(
     () => buildInfectionBrief(rows, schools, params, scopeLabel),
@@ -52,9 +62,10 @@ export default function InfectionAiPanel({
     setError('')
     setWarnings([])
     try {
-      const out = await callAi(cfg, cfg.infectionPrompt, brief.text)
-      setWarnings(auditAiOutput(brief, out, schools.map((s) => s.name)))
-      setAnswer(revealCodes(out, brief.codeMap)) // 화면에는 실명으로
+      const r = await callAiSmart(cfg, cfg.infectionPrompt, brief.text)
+      setWarnings(auditAiOutput(brief, r.text, schools.map((s) => s.name)))
+      setAnswer(revealCodes(r.text, brief.codeMap)) // 화면에는 실명으로
+      setVia({ via: r.via, model: r.model })
       setRanAt(Date.now())
     } catch (e) {
       setError(e instanceof Error ? e.message : '분석 실패')
@@ -75,7 +86,7 @@ export default function InfectionAiPanel({
           <button className="btn ghost small no-print" onClick={() => setShowInput((v) => !v)}>
             <i className="ti ti-file-text" aria-hidden="true" /> AI에 보낼 자료 {showInput ? '접기' : '보기'}
           </button>
-          <button className="btn primary small no-print" onClick={() => void run()} disabled={loading || !configured}>
+          <button className="btn primary small no-print" onClick={() => void run()} disabled={loading || !canRun}>
             <i className={`ti ${loading ? 'ti-loader-2' : 'ti-microscope'}`} aria-hidden="true" />{' '}
             {loading ? '분석 중…' : '심층 분석'}
           </button>
@@ -92,10 +103,22 @@ export default function InfectionAiPanel({
         학생 개인정보는 애초에 서버에 없습니다.
       </p>
 
-      {!configured && (
+      {serverAi?.enabled ? (
+        <div className="muted" style={{ fontSize: 11, marginBottom: 10 }}>
+          <i className="ti ti-server-bolt" style={{ verticalAlign: -2 }} aria-hidden="true" />{' '}
+          서버에 등록된 AI 키로 호출합니다({serverAi.model}) — 이 브라우저에는 키가 저장되지 않습니다.
+        </div>
+      ) : localKey ? (
+        <div className="muted" style={{ fontSize: 11, marginBottom: 10 }}>
+          <i className="ti ti-key" style={{ verticalAlign: -2 }} aria-hidden="true" />{' '}
+          이 기기에 저장된 개인 키로 호출합니다({cfg.model}). 서버(Vercel)에 <code>AI_API_KEY</code>를 등록하면
+          기기마다 키를 넣지 않아도 되고 키가 브라우저에 남지 않습니다.
+        </div>
+      ) : (
         <div className="admin-err" style={{ marginBottom: 10 }}>
-          <i className="ti ti-key-off" aria-hidden="true" /> AI 제공자·API 키가 설정되지 않았습니다 —
-          우측 <b>AI 특이사항 보고</b> 패널의 설정에서 먼저 등록해 주세요.
+          <i className="ti ti-key-off" aria-hidden="true" /> AI를 쓸 수 없습니다 —
+          서버(Vercel)에 <code>AI_API_KEY</code>를 등록하거나, 우측 <b>AI 특이사항 보고</b> 패널 설정에서
+          이 기기용 키를 넣어 주세요.
         </div>
       )}
 
@@ -119,7 +142,8 @@ export default function InfectionAiPanel({
           <pre className="ai-answer">{answer}</pre>
           <div className="row between" style={{ marginTop: 8, flexWrap: 'wrap', gap: 8 }}>
             <span className="muted" style={{ fontSize: 11 }}>
-              {ranAt && `${new Date(ranAt).toLocaleString('ko-KR')} · ${cfg.model}`} · {DISCLAIMER}
+              {ranAt && `${new Date(ranAt).toLocaleString('ko-KR')} · ${via?.model || cfg.model}`}
+              {via && ` · ${via.via === 'server' ? '서버 키' : '이 기기 키'}`} · {DISCLAIMER}
             </span>
             <div className="row" style={{ gap: 8 }}>
               <button

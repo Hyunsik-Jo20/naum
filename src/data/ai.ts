@@ -1,6 +1,12 @@
 // 다중 AI 제공자 추상화 — Gemini / OpenAI / Anthropic / 커스텀(OpenAI 호환).
-// 키는 브라우저 localStorage에만 저장하고, 호출 시 "비식별 집계"만 프롬프트로 전송한다.
-// (개인정보 원칙: 학생 이름·반·번호는 절대 포함하지 않음.)
+// 호출 시 "비식별 집계"만 프롬프트로 전송한다(개인정보 원칙: 학생 이름·반·번호는 절대 미포함).
+//
+// 키가 있는 곳은 둘이다:
+//  ① **서버**(Vercel env AI_API_KEY) — `/api/ai` 경유. 로그인한 edu/nurse만 호출 가능.
+//     키가 브라우저에 없고 호출 제한도 걸린다. 지금은 교육청 감염병 심층 분석이 이 길을 쓴다.
+//  ② **이 브라우저**(localStorage 'naum.ai') — 서버가 미설정이면 폴백. 보건교사 AI 추천은 아직 이쪽.
+// `callAiSmart`가 ①→② 순으로 시도한다.
+import { supabase } from './supabaseClient'
 
 export type AiProvider = 'gemini' | 'openai' | 'anthropic' | 'custom'
 
@@ -150,6 +156,87 @@ async function readError(res: Response): Promise<string> {
     /* keep raw */
   }
   return `${res.status} ${res.statusText}${body ? ` — ${String(body).slice(0, 200)}` : ''}`
+}
+
+/* ───────────── 서버 경유 호출 (/api/ai) ───────────── */
+// 왜: AI 키를 브라우저에 두면 localStorage 평문 + 네트워크 탭 노출 + 비용 통제 불가였다.
+//  서버(Vercel env)에 키를 두고 로그인한 edu/nurse만 호출하게 한다.
+//  서버가 미설정(501)이거나 권한이 없으면(403) **기존 로컬 키 방식으로 폴백** — 무중단.
+//  (SCHOOL_MASTER_SECRET을 서버로 옮긴 Phase 2와 같은 패턴: keys.js·token.js 참고)
+
+export interface ServerAiStatus {
+  enabled: boolean
+  provider: string | null
+  model: string | null
+}
+
+let serverAiCache: { at: number; v: ServerAiStatus } | null = null
+const SERVER_AI_TTL = 60_000
+
+/** 서버 AI를 쓸 수 있는지 — 키는 돌려받지 않고 가용 여부·모델명만. 60초 캐시. */
+export async function fetchServerAi(force = false): Promise<ServerAiStatus> {
+  const off: ServerAiStatus = { enabled: false, provider: null, model: null }
+  if (!force && serverAiCache && Date.now() - serverAiCache.at < SERVER_AI_TTL) return serverAiCache.v
+  try {
+    const r = await fetch('/api/ai', { method: 'GET' })
+    if (!r.ok) { serverAiCache = { at: Date.now(), v: off }; return off }
+    const j = (await r.json()) as ServerAiStatus
+    const v: ServerAiStatus = { enabled: !!j.enabled, provider: j.provider ?? null, model: j.model ?? null }
+    serverAiCache = { at: Date.now(), v }
+    return v
+  } catch {
+    serverAiCache = { at: Date.now(), v: off }
+    return off
+  }
+}
+
+/** 서버 미설정·권한 없음 — 로컬 키로 폴백해도 되는 상황임을 알린다. */
+class ServerAiUnavailable extends Error {}
+
+async function callAiServer(system: string, user: string): Promise<{ text: string; model: string }> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' }
+  try {
+    if (supabase) {
+      const timeout = new Promise<null>((r) => setTimeout(() => r(null), 2500))
+      const data = await Promise.race([supabase.auth.getSession().then((x) => x.data), timeout])
+      const jwt = data?.session?.access_token
+      if (jwt) headers.Authorization = `Bearer ${jwt}`
+    }
+  } catch { /* ignore */ }
+  if (!headers.Authorization) throw new ServerAiUnavailable('로그인 세션 없음')
+
+  let r: Response
+  try {
+    r = await fetch('/api/ai', { method: 'POST', headers, body: JSON.stringify({ system, user }) })
+  } catch {
+    throw new ServerAiUnavailable('서버에 닿지 못함')
+  }
+  // 501 미설정 · 404 미배포 · 403 권한 없음 → 로컬 키 폴백 허용
+  if (r.status === 501 || r.status === 404 || r.status === 403) throw new ServerAiUnavailable(String(r.status))
+  const j = await r.json().catch(() => ({}))
+  // 429·413·502 등은 "서버 AI를 쓰는 중에 난 진짜 오류" — 조용히 개인 키로 넘어가면 안 된다.
+  if (!r.ok) throw new Error(j.error || `${r.status} ${r.statusText}`)
+  return { text: String(j.text || '(빈 응답)'), model: String(j.model || '') }
+}
+
+export interface AiResult {
+  text: string
+  via: 'server' | 'local'
+  model: string
+}
+
+/** 서버 우선 → 안 되면 브라우저에 저장된 개인 키. 어느 쪽으로 갔는지 함께 돌려준다. */
+export async function callAiSmart(cfg: AiConfig, system: string, user: string): Promise<AiResult> {
+  try {
+    const r = await callAiServer(system, user)
+    return { text: r.text, via: 'server', model: r.model }
+  } catch (e) {
+    if (!(e instanceof ServerAiUnavailable)) throw e
+  }
+  if (!isConfigured(cfg)) {
+    throw new Error('AI를 쓸 수 없습니다 — 서버에 AI 키가 설정되지 않았고, 이 기기에 저장된 키도 없습니다.')
+  }
+  return { text: await callAi(cfg, system, user), via: 'local', model: cfg.model }
 }
 
 /** 단발 텍스트 생성. system=역할 지시, user=데이터/요청. 반환=생성 텍스트. */
