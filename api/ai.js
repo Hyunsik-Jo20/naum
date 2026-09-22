@@ -8,7 +8,11 @@
 //  미설정(AI_API_KEY 없음) 시 501 → 클라이언트는 기존 로컬 키로 폴백(무중단, keys.js와 같은 패턴).
 //
 //  env: AI_PROVIDER(gemini|openai|anthropic|custom, 기본 gemini) · AI_API_KEY · AI_MODEL
-//       · AI_BASE_URL(custom 전용) · SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_ANON_KEY
+//       · AI_BASE_URL(custom 전용)
+//       · SUPABASE_URL(또는 VITE_SUPABASE_URL) / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_ANON_KEY(또는 VITE_)
+
+// Vercel에는 클라이언트용 VITE_ 이름으로만 들어 있을 수 있다 — keys.js·token.js·push.js와 같은 폴백.
+const sbUrl = () => process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 
 const MAX_INPUT = 24_000 // system+user 합계 상한(자). 브리프가 ~1.5KB라 넉넉하되 폭주는 막는다.
 const MAX_OUTPUT_TOKENS = 2048
@@ -151,7 +155,7 @@ export default async function handler(req, res) {
   if (!cfg.apiKey) missing.push('AI_API_KEY')
   if (!cfg.model) missing.push('AI_MODEL')
   if (cfg.provider === 'custom' && !cfg.baseUrl) missing.push('AI_BASE_URL')
-  if (!process.env.SUPABASE_URL) missing.push('SUPABASE_URL')
+  if (!sbUrl()) missing.push('SUPABASE_URL(또는 VITE_SUPABASE_URL)')
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY')
 
   // GET = 가용성 확인. 키는 절대 돌려주지 않고 "쓸 수 있는지 + 모델명 + 빠진 변수 이름"만.
@@ -169,9 +173,9 @@ export default async function handler(req, res) {
   // 미설정 → 501. 클라이언트가 기존 로컬 키로 폴백한다(무중단).
   if (!enabled) return res.status(501).json({ error: 'server AI not configured' })
 
-  const SB_URL = process.env.SUPABASE_URL || ''
+  const SB_URL = sbUrl()
   const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-  const ANON = process.env.SUPABASE_ANON_KEY || ''
+  const ANON = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''
   if (!SB_URL || !SERVICE) return res.status(501).json({ error: 'supabase not configured' })
 
   const caller = await callerRole(req, SB_URL, SERVICE, ANON)
