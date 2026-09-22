@@ -50,6 +50,10 @@ export function decodeBuffer(buf: ArrayBuffer): string {
 export interface ParseResult {
   students: Student[]
   error?: string
+  /** 성별 열을 찾았는지. 못 찾으면 전원 '남'이 되므로 업로드 화면이 경고하고 되묻는다. */
+  sexColumnFound?: boolean
+  /** 성별 값을 읽지 못해 '남'으로 채운 학생 수(열은 찾았지만 칸이 비었거나 모르는 값) */
+  sexUnknownCount?: number
 }
 
 /** 성별 텍스트 해석 — 남/여, 남자/여자, M/F, male/female, boy/girl. 못 읽으면 null. */
@@ -119,6 +123,7 @@ export function parseRosterRows(rows: string[][]): ParseResult {
 
   const students: Student[] = []
   let seq = 0
+  let sexUnknownCount = 0
   for (let i = 1; i < cleaned.length; i++) {
     const c = cleaned[i].map((x) => x.replace(/^"|"$/g, ''))
     const grade = Number(c[col.grade])
@@ -128,7 +133,11 @@ export function parseRosterRows(rows: string[][]): ParseResult {
     seq += 1
     const number = col.no >= 0 && c[col.no] ? Number(c[col.no]) || seq : seq
     const sexRaw = col.sex >= 0 ? c[col.sex] ?? '' : ''
-    const sex: Sex = parseSexValue(sexRaw) ?? '남'
+    // 못 읽으면 '남'으로 채우되 몇 명인지 세어 둔다 — 성별은 혈압 참고범위를 가르므로
+    //  조용히 넘어가면 안 된다(업로드 화면이 경고하고 되묻는다).
+    const parsedSex = parseSexValue(sexRaw)
+    if (!parsedSex) sexUnknownCount += 1
+    const sex: Sex = parsedSex ?? '남'
     const phone = col.phone >= 0 ? c[col.phone] : ''
     const careRaw = col.care >= 0 ? (c[col.care] ?? '').trim() : ''
     const care = careRaw ? (/^[oOxX○×]$/.test(careRaw) ? (/[oO○]/.test(careRaw) ? '요보호' : '') : careRaw) : ''
@@ -144,7 +153,7 @@ export function parseRosterRows(rows: string[][]): ParseResult {
     })
   }
   if (!students.length) return { students: [], error: '읽을 수 있는 학생 행이 없습니다.' }
-  return { students }
+  return { students, sexColumnFound: col.sex >= 0, sexUnknownCount }
 }
 
 export function parseRosterCsv(text: string): ParseResult {

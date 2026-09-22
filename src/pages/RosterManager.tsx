@@ -31,6 +31,7 @@ import type { Student } from '../types'
 export default function RosterManager() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<Student[] | null>(null)
+  const [sexWarn, setSexWarn] = useState<{ columnFound: boolean; unknown: number } | null>(null)
   const [fileName, setFileName] = useState('')
   const [error, setError] = useState('')
   const custom = isCustomRoster()
@@ -131,6 +132,7 @@ export default function RosterManager() {
   function onFile(file: File) {
     setError('')
     setPreview(null)
+    setSexWarn(null)
     setFileName(file.name)
     const isXlsx = /\.xlsx$/i.test(file.name)
     file
@@ -140,7 +142,10 @@ export default function RosterManager() {
           ? parseRosterRows(await readXlsxFirstSheet(buf))
           : parseRosterCsv(decodeBuffer(buf))
         if (res.error) setError(res.error)
-        else setPreview(res.students)
+        else {
+          setPreview(res.students)
+          setSexWarn({ columnFound: res.sexColumnFound !== false, unknown: res.sexUnknownCount ?? 0 })
+        }
       })
       .catch((e) => {
         setError(
@@ -153,6 +158,20 @@ export default function RosterManager() {
 
   function apply() {
     if (!preview) return
+    // 성별은 화면 표시뿐 아니라 **활력징후 혈압 참고범위**를 가른다(3학년부터 남녀 상한이 다름).
+    //  못 읽었으면 전원 '남'이 되므로 조용히 적용하지 않고 되묻는다.
+    if (sexWarn && !sexWarn.columnFound) {
+      if (!confirm(
+        '성별 열을 찾지 못했습니다. 이대로 적용하면 전원 "남"으로 등록되고,\n'
+        + '활력징후 혈압 참고범위도 남학생 기준으로 적용됩니다.\n\n'
+        + '명부에 "성별" 열(남/여)을 넣어 다시 올리는 것을 권합니다. 그래도 적용할까요?',
+      )) return
+    } else if (sexWarn && sexWarn.unknown > 0) {
+      if (!confirm(
+        `성별을 읽지 못한 학생이 ${sexWarn.unknown}명 있습니다. 그 학생은 "남"으로 등록됩니다.\n`
+        + '(빈 칸이거나 남/여·M/F·1/2가 아닌 값)\n\n이대로 적용할까요?',
+      )) return
+    }
     saveRoster(preview)
     alert(`학생 명부 ${preview.length}명을 적용했습니다. 화면을 새로고침합니다.`)
     window.location.reload()
@@ -181,6 +200,7 @@ export default function RosterManager() {
   const pvWithPhone = preview ? preview.filter((s) => s.guardianPhone).length : 0
   const pvBoys = preview ? preview.filter((s) => s.sex === '남').length : 0
   const pvGirls = preview ? preview.filter((s) => s.sex === '여').length : 0
+  const sexBad = !!sexWarn && (!sexWarn.columnFound || sexWarn.unknown > 0)
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
@@ -255,6 +275,17 @@ export default function RosterManager() {
             <div className="sec-label">미리보기 · {preview.length}명</div>
             <button className="btn" onClick={apply}><i className="ti ti-check" aria-hidden="true" /> 이 명부 적용</button>
           </div>
+          {sexBad && (
+            <div className="admin-err" style={{ marginBottom: 10, lineHeight: 1.7 }}>
+              <i className="ti ti-alert-triangle" aria-hidden="true" />{' '}
+              {!sexWarn!.columnFound
+                ? <><b>성별 열을 찾지 못했습니다</b> — 이대로 적용하면 전원 “남”으로 등록됩니다.</>
+                : <><b>성별을 읽지 못한 학생 {sexWarn!.unknown}명</b> — 그 학생은 “남”으로 등록됩니다.</>}
+              <br />
+              성별은 명단 표시뿐 아니라 <b>활력징후 혈압 참고범위</b>를 가릅니다(3학년부터 남녀 상한이 다름).
+              명부에 <b>성별</b> 열(남/여 · M/F · 1/2)을 넣어 다시 올리는 것을 권합니다.
+            </div>
+          )}
           <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
             학급 {pvClasses}개 · 남 {pvBoys}명 · 여 {pvGirls}명 · 보호자 연락처 {pvWithPhone}/{preview.length}명
             {' · '}요보호 {preview.filter((s) => s.care).length}명

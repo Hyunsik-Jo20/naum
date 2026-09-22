@@ -2,8 +2,10 @@
 //  · 전부 선택 입력이다. 평소처럼 체온만 재고 닫아도 된다.
 //  · 입력은 키패드 직접 입력이 기본(숫자 키패드). 값을 넣는 즉시 참고범위를 벗어나면
 //    빨갛게 표시하고 아래에 안내를 모아 보여준다 — 확인용 표시이지 진단이 아니다.
+//  · 참고범위는 이 학생의 **학년·성별**에 맞는 것이 자동으로 쓰인다(ctx). 교직원은 성인 기준.
 import { useState } from 'react'
-import { judgeVital, vitalItems, formatVital } from '../data/vitals'
+import { judgeVital, vitalItems, formatVital, resolveVitalItem, vitalCtxLabel, rangeText, hasBands } from '../data/vitals'
+import type { VitalCtx } from '../data/vitals'
 import type { VitalItem, Vitals } from '../types'
 
 /** 입력칸 하나의 문자열 상태 — 항목 id별로 [첫 값, 둘째 값] */
@@ -31,17 +33,22 @@ const num = (s: string): number | null => {
 
 export default function VitalsModal({
   initial,
+  ctx,
   onConfirm,
   onClose,
   onEditItems,
 }: {
   initial?: Vitals | null
+  /** 이 방문의 학년·성별 — 참고범위를 고르는 데 쓴다(키오스크에서 학생이 고른 값). */
+  ctx?: VitalCtx | null
   onConfirm: (v: Vitals | null) => void
   onClose: () => void
   /** 활력징후 항목 편집 열기 (관리자용) */
   onEditItems?: () => void
 }) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(initial))
+  // 밴드를 쓰는 항목이 하나도 없으면(학교가 학년 기준을 안 쓰는 경우) 안내를 띄우지 않는다
+  const ctxLabel = vitalItems.some(hasBands) ? vitalCtxLabel(ctx) : null
 
   function set(id: string, idx: 0 | 1, val: string) {
     setDraft((p) => {
@@ -79,7 +86,7 @@ export default function VitalsModal({
 
   const { vitals: preview, errors } = build()
   const warnings = vitalItems
-    .map((item) => ({ item, flag: judgeVital(item, preview[item.id]) }))
+    .map((item) => ({ item: resolveVitalItem(item, ctx), flag: judgeVital(item, preview[item.id], ctx) }))
     .filter((x) => x.flag)
 
   function save() {
@@ -88,7 +95,7 @@ export default function VitalsModal({
     onConfirm(Object.keys(vitals).length ? vitals : null)
   }
 
-  const flagOf = (item: VitalItem) => judgeVital(item, preview[item.id])
+  const flagOf = (item: VitalItem) => judgeVital(item, preview[item.id], ctx)
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -101,17 +108,22 @@ export default function VitalsModal({
         </div>
         <p className="muted" style={{ margin: '0 0 12px', fontSize: 13, lineHeight: 1.6 }}>
           측정한 것만 넣으면 됩니다. 빈칸은 기록되지 않아요.
+          {ctxLabel && <> 참고범위는 <b>{ctxLabel}</b>으로 자동 적용됩니다.</>}
         </p>
 
         <div className="vit-list">
-          {vitalItems.map((item) => {
-            const flag = flagOf(item)
+          {vitalItems.map((raw) => {
+            const item = resolveVitalItem(raw, ctx)
+            const flag = flagOf(raw)
             const [a, b] = draft[item.id] ?? ['', '']
             return (
               <div key={item.id} className={`vit-row ${flag ? 'bad' : ''}`}>
                 <label className="vit-label" htmlFor={`vit-${item.id}`}>
                   {item.label}
                   <span className="muted-inline"> {item.unit}</span>
+                  <span className="vit-hint" title={hasBands(raw) && ctxLabel ? `${ctxLabel} 참고범위` : '참고범위'}>
+                    {rangeText(item)}
+                  </span>
                 </label>
                 <div className="vit-inputs">
                   <input
@@ -119,7 +131,7 @@ export default function VitalsModal({
                     type="text"
                     inputMode="decimal"
                     value={a}
-                    placeholder={item.low != null ? String(item.low) : ''}
+                    placeholder={item.low != null ? item.low.toFixed(item.decimals) : ''}
                     onChange={(e) => set(item.id, 0, e.target.value)}
                   />
                   {item.type === 'pair' && (
@@ -129,7 +141,7 @@ export default function VitalsModal({
                         type="text"
                         inputMode="decimal"
                         value={b}
-                        placeholder={item.low2 != null ? String(item.low2) : ''}
+                        placeholder={item.low2 != null ? item.low2.toFixed(item.decimals) : ''}
                         onChange={(e) => set(item.id, 1, e.target.value)}
                       />
                     </>

@@ -1,11 +1,23 @@
 // 활력징후 항목 편집 — 항목 추가·삭제·순서와 정상 참고범위 조정 (요청 2026-09-22).
-//  연령대·학교급마다 기준이 달라 학교가 직접 정할 수 있어야 한다.
+//  · 기본 범위(표의 정상범위)는 맞는 학년 줄이 없을 때 쓰인다.
+//  · **학년·성별 기준**(밴드)을 두면 접수 시 학생이 고른 학년·성별에 맞는 범위가 자동 적용된다.
+//    혈압처럼 연령·성별 기준이 있는 항목에 쓴다. 교직원 접수는 학년 0(성인) 줄.
 //  저장은 이 기기 + 클라우드(school_settings.vitals) → 다른 기기도 다음 실행에 반영.
-import { useState } from 'react'
-import { DEFAULT_VITAL_ITEMS, restoreDefaultVitalItems, saveVitalItems, vitalItems } from '../data/vitals'
+import { Fragment, useState } from 'react'
+import {
+  ADULT_GRADE,
+  DEFAULT_VITAL_ITEMS,
+  missingDefaultBands,
+  restoreDefaultVitalItems,
+  saveVitalItems,
+  vitalItems,
+  withDefaultBands,
+} from '../data/vitals'
 import { SUPABASE_ENABLED } from '../data/supabaseClient'
 import { saveCloudVitalItems } from '../api/supabaseBackend'
-import type { VitalItem } from '../types'
+import type { Sex, VitalBand, VitalItem } from '../types'
+
+const gradeLabel = (g: number) => (g === ADULT_GRADE ? '교직원(성인)' : `${g}학년`)
 
 const numOr = (s: string, d?: number): number | undefined => {
   const t = s.trim()
@@ -18,6 +30,26 @@ export default function VitalsEditModal({ onClose }: { onClose: () => void }) {
   const [items, setItems] = useState<VitalItem[]>(() => vitalItems.map((v) => ({ ...v })))
   const [label, setLabel] = useState('')
   const [unit, setUnit] = useState('')
+  const [openBands, setOpenBands] = useState<string | null>(null)
+  const needsBands = missingDefaultBands(items)
+
+  function patchBand(i: number, bi: number, p: Partial<VitalBand>) {
+    setItems((prev) => prev.map((v, k) => (k === i
+      ? { ...v, bands: (v.bands ?? []).map((b, j) => (j === bi ? { ...b, ...p } : b)) }
+      : v)))
+  }
+  function addBand(i: number) {
+    setItems((prev) => prev.map((v, k) => (k === i
+      ? { ...v, bands: [...(v.bands ?? []), { fromGrade: 1, toGrade: 6, low: v.low, high: v.high, low2: v.low2, high2: v.high2 }] }
+      : v)))
+  }
+  function removeBand(i: number, bi: number) {
+    setItems((prev) => prev.map((v, k) => {
+      if (k !== i) return v
+      const next = (v.bands ?? []).filter((_, j) => j !== bi)
+      return { ...v, bands: next.length ? next : undefined }
+    }))
+  }
 
   function patch(i: number, p: Partial<VitalItem>) {
     setItems((prev) => prev.map((v, k) => (k === i ? { ...v, ...p } : v)))
@@ -77,9 +109,21 @@ export default function VitalsEditModal({ onClose }: { onClose: () => void }) {
           <button className="x" onClick={onClose} aria-label="닫기"><i className="ti ti-x" aria-hidden="true" /></button>
         </div>
         <p className="muted" style={{ margin: '0 0 12px', fontSize: 13, lineHeight: 1.6 }}>
-          <b>정상범위</b>를 벗어난 값은 입력할 때 빨갛게 표시됩니다. 연령대·학교급에 따라 기준이 다르니
-          우리 학교에 맞게 조정해 주세요. <span className="muted-inline">(확인용 표시일 뿐 진단 기준이 아닙니다)</span>
+          <b>정상범위</b>를 벗어난 값은 입력할 때 빨갛게 표시됩니다.
+          아래 <b>학년·성별 기준</b>을 두면 접수 시 학생이 고른 학년·성별에 맞는 범위가 자동 적용됩니다
+          (교직원 접수는 <b>학년 0</b> 줄). 표의 정상범위는 맞는 학년 줄이 없을 때 쓰는 기본값입니다.
+          <span className="muted-inline"> 확인용 표시일 뿐 진단 기준이 아닙니다.</span>
         </p>
+
+        {needsBands && (
+          <div className="infection-alert" style={{ marginBottom: 12, alignItems: 'center', gap: 8 }}>
+            <span style={{ flex: 1 }}>
+              <i className="ti ti-info-circle" aria-hidden="true" /> 초등 <b>학년·성별 기본 기준</b>이 추가되었습니다
+              (혈압 = 연령·성별별, 맥박·호흡수 = 학령기/성인). 지금 항목에는 아직 적용되지 않았어요.
+            </span>
+            <button className="btn small" onClick={() => setItems((p) => withDefaultBands(p))}>적용하기</button>
+          </div>
+        )}
 
         <div className="report-table-wrap" style={{ maxHeight: '46vh', overflowY: 'auto' }}>
           <table className="report-table">
@@ -90,7 +134,8 @@ export default function VitalsEditModal({ onClose }: { onClose: () => void }) {
             </thead>
             <tbody>
               {items.map((v, i) => (
-                <tr key={v.id}>
+                <Fragment key={v.id}>
+                <tr>
                   <td>
                     <input value={v.label} style={{ width: 92 }}
                       onChange={(e) => patch(i, { label: e.target.value })} />
@@ -130,6 +175,78 @@ export default function VitalsEditModal({ onClose }: { onClose: () => void }) {
                     </button>
                   </td>
                 </tr>
+                <tr>
+                  <td colSpan={4} style={{ paddingTop: 0 }}>
+                    <button className="btn ghost small" onClick={() => setOpenBands(openBands === v.id ? null : v.id)}>
+                      <i className={`ti ti-chevron-${openBands === v.id ? 'up' : 'down'}`} aria-hidden="true" />{' '}
+                      학년·성별 기준 {v.bands?.length ? `${v.bands.length}줄` : '없음'}
+                    </button>
+                    {v.source && <span className="vit-src"> · {v.source}</span>}
+                    {openBands === v.id && (
+                      <div className="vit-bands">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>학년(부터~까지)</th><th>성별</th>
+                              <th>{v.type === 'pair' ? '수축기 / 이완기' : '정상범위'}</th><th />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(v.bands ?? []).map((b, bi) => (
+                              <tr key={bi}>
+                                <td>
+                                  <input inputMode="numeric" value={b.fromGrade}
+                                    onChange={(e) => patchBand(i, bi, { fromGrade: Number(e.target.value) || 0 })} />
+                                  <span> ~ </span>
+                                  <input inputMode="numeric" value={b.toGrade}
+                                    onChange={(e) => patchBand(i, bi, { toGrade: Number(e.target.value) || 0 })} />
+                                  <span className="muted-inline"> {gradeLabel(b.fromGrade)}</span>
+                                </td>
+                                <td>
+                                  <select value={b.sex ?? ''}
+                                    onChange={(e) => patchBand(i, bi, { sex: (e.target.value || undefined) as Sex | undefined })}>
+                                    <option value="">공통</option>
+                                    <option value="남">남</option>
+                                    <option value="여">여</option>
+                                  </select>
+                                </td>
+                                <td>
+                                  <input inputMode="decimal" value={b.low ?? ''}
+                                    onChange={(e) => patchBand(i, bi, { low: numOr(e.target.value) })} />
+                                  <span> ~ </span>
+                                  <input inputMode="decimal" value={b.high ?? ''}
+                                    onChange={(e) => patchBand(i, bi, { high: numOr(e.target.value) })} />
+                                  {v.type === 'pair' && (
+                                    <>
+                                      <span className="muted-inline"> / </span>
+                                      <input inputMode="decimal" value={b.low2 ?? ''}
+                                        onChange={(e) => patchBand(i, bi, { low2: numOr(e.target.value) })} />
+                                      <span> ~ </span>
+                                      <input inputMode="decimal" value={b.high2 ?? ''}
+                                        onChange={(e) => patchBand(i, bi, { high2: numOr(e.target.value) })} />
+                                    </>
+                                  )}
+                                </td>
+                                <td>
+                                  <button className="x" onClick={() => removeBand(i, bi)} title="이 줄 삭제">
+                                    <i className="ti ti-trash" aria-hidden="true" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <button className="btn ghost small" style={{ marginTop: 6 }} onClick={() => addBand(i)}>
+                          <i className="ti ti-plus" aria-hidden="true" /> 학년 줄 추가
+                        </button>
+                        <div className="vit-src" style={{ marginTop: 4 }}>
+                          학년 <b>0</b> = 교직원(성인). 같은 학년에 성별 줄과 공통 줄이 다 있으면 <b>성별 줄</b>이 먼저 쓰입니다.
+                        </div>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>

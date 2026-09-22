@@ -81,6 +81,20 @@ export interface Visit {
  *  단일 항목은 [값], 혈압처럼 두 값을 재는 항목은 [수축기, 이완기]로 담는다. */
 export type Vitals = Record<string, number[]>
 
+/** 학년·성별에 따라 달라지는 참고범위 한 칸.
+ *  조건이 맞는 밴드가 VitalItem의 low/high를 덮어쓴다(혈압처럼 연령·성별 기준이 있는 항목).
+ *  grade 0 = 교직원(성인). 초등은 1~6. */
+export interface VitalBand {
+  fromGrade: number
+  toGrade: number
+  /** 이 성별에만 적용. 비우면 남녀 공통. */
+  sex?: Sex
+  low?: number
+  high?: number
+  low2?: number
+  high2?: number
+}
+
 /** 활력징후 항목 정의 — 학교가 편집할 수 있다(항목 추가·삭제·정상범위 조정). */
 export interface VitalItem {
   id: string
@@ -88,11 +102,15 @@ export interface VitalItem {
   unit: string           // ℃ · mmHg · 회/분 · %
   type: 'number' | 'pair' // pair = 혈압처럼 두 칸(수축기/이완기)
   decimals: number       // 소수 자릿수 (체온 1, 나머지 0)
-  /** 정상 참고범위 — 벗어나면 화면에 강조된다. 진단 기준이 아니라 확인용 표시. */
+  /** 기본 참고범위 — 맞는 밴드가 없을 때 쓰인다. 진단 기준이 아니라 확인용 표시. */
   low?: number
   high?: number
   low2?: number          // pair의 둘째 값(이완기) 범위
   high2?: number
+  /** 학년·성별별 참고범위. 접수 시 학생이 고른 학년·성별로 자동 선택된다. */
+  bands?: VitalBand[]
+  /** 참고범위의 출처 한 줄 — 편집 화면에 보여 준다. */
+  source?: string
   /** 입력 허용 범위(오타 방지) */
   hardMin: number
   hardMax: number

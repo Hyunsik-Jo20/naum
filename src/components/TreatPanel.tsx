@@ -786,6 +786,7 @@ export default function TreatPanel({
       {vitalsOpen && (
         <VitalsModal
           initial={vitals}
+          ctx={{ grade: visit.grade, sex: visit.sex, isStaff: visit.isStaff }}
           onConfirm={applyVitals}
           onClose={() => setVitalsOpen(false)}
           onEditItems={() => { setVitalsOpen(false); setVitalsEditOpen(true) }}
