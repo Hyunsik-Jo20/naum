@@ -9,7 +9,7 @@ import { uniqTopic, onWake } from './realtimeUtil'
 import { holidayName, isOperatingDay } from './holidays'
 import { INF_CAT, SYNDROMES, DEFAULT_SURV } from './surveillance'
 import type { EduSchool } from './eduMock'
-import type { Disease, Sex, VisitStatus } from '../types'
+import type { Disease, Outcome, Sex, VisitStatus } from '../types'
 
 export interface EduVisitRow {
   schoolId: string
@@ -18,6 +18,10 @@ export interface EduVisitRow {
   sex: Sex
   catIdx: number // 주병명 계통(DISEASE_CATEGORIES index). 미확정이면 첫 증상타일 계통, 없으면 11(기타)
   status: VisitStatus
+  /** 처치 결과 — 귀가·병원 이송 비율이 중증도 대리지표가 된다(감염병 심층 분석 입력). 비식별. */
+  outcome?: Outcome
+  /** 학생이 키오스크에서 고른 증상 타일 id — 증상 조합(발열+발진 등) 판별용. 비식별. */
+  tiles: string[]
 }
 
 /** 실데이터 집계를 얹은 학교(등록부 + 주간 통계) — surveillance 함수들의 입력. */
@@ -54,6 +58,7 @@ interface RawRow {
   symptom_tile_ids: string[] | null
   diseases: Disease[] | null
   status: VisitStatus
+  outcome: Outcome | null
   created_at: number
 }
 
@@ -66,7 +71,7 @@ export async function fetchEduVisits(): Promise<EduVisitRow[]> {
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from('visits')
-      .select('school_id,grade,sex,symptom_tile_ids,diseases,status,created_at')
+      .select('school_id,grade,sex,symptom_tile_ids,diseases,status,outcome,created_at')
       .gte('created_at', since)
       .neq('school_id', 'demo')
       .or('is_staff.is.null,is_staff.eq.false') // 교직원 방문 제외(학생 비식별 집계)
@@ -81,6 +86,8 @@ export async function fetchEduVisits(): Promise<EduVisitRow[]> {
         sex: r.sex,
         catIdx: catIdxOf(r.diseases, r.symptom_tile_ids),
         status: r.status,
+        outcome: r.outcome ?? undefined,
+        tiles: r.symptom_tile_ids ?? [],
       })
     }
     if (data.length < PAGE) break

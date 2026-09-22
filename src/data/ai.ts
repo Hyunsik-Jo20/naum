@@ -28,6 +28,7 @@ export interface AiConfig {
   eveningPrompt: string // 저녁 보고 기본 프롬프트(수정 가능)
   intervalPrompt: string // 주기(30분·1시간) 보고 기본 프롬프트(수정 가능)
   triagePrompt: string // 보건실 병명·처치 추천 프롬프트(수정 가능)
+  infectionPrompt: string // 교육청 감염병 심층 분석 프롬프트(수정 가능)
 }
 
 // 보건실 병명·처치 추천 기본 프롬프트(보건교사가 설정창에서 수정 가능).
@@ -55,6 +56,34 @@ export const DEFAULT_EVENING_PROMPT =
   '④ 날씨·대기질 영향 ⑤ 내일 권고 조치. 문서로 출력될 것이므로 소제목과 항목으로 정리하세요. ' +
   '데이터에 없는 내용은 추정하지 말고, 학생 개인정보는 언급하지 마세요.'
 
+// 교육청 감염병 심층 분석 — 요청 2026-09-22.
+//  일반 브리핑 프롬프트로는 "발열·호흡기 2.3배"를 되풀이하는 수준을 넘지 못했다.
+//  ① 판단 기준(학교 감염병 유행 판단·증후군 감별 단서)을 명시하고
+//  ② 출력 형식을 고정해 "판단 → 근거 숫자 → 감별 → 조치 → 확신도"가 반드시 나오게 하며
+//  ③ **숫자는 입력에 있는 것만** 쓰게 못 박는다(이 글이 교육청 공문으로 나갈 수 있다).
+export const DEFAULT_INFECTION_PROMPT =
+  '당신은 시도교육청 학교보건 상황실의 감염병 역학 분석 담당입니다. ' +
+  '제공된 비식별 집계(일자별 추이·증후군별 평소 대비 배수·학년 분포·시간대 분포·처치 결과 분포·학교별 상승·지역 동시 상승)만 근거로, ' +
+  '지금 무엇이 유행하고 있을 가능성이 있는지 한국어로 분석하세요.\n' +
+  '판단에 쓸 단서: ' +
+  '(가) 시간 — 하루 튄 것과 3일 이상 연속 상승은 다르다. 휴업일(×) 뒤 급증은 지역사회 유입을 시사한다. ' +
+  '(나) 학년 — 저학년 집중은 수족구·수두·유행성이하선염 계열, 전학년 고른 분포는 인플루엔자·코로나 계열을 시사한다. ' +
+  '(다) 시간대 — 급식 전후(12~14시) 집중 + 구토·설사 우세는 식중독·노로를 의심할 근거다. ' +
+  '(라) 중증도 — 건수가 같아도 귀가·병원 이송 비율이 오르면 상황이 다르다. ' +
+  '(마) 공간 — 같은 지역 2개교 이상이 같은 증후군으로 동시에 오르면 학교 내 전파를 넘어선 확산을 의심한다. ' +
+  '(바) 단일 학교의 단일 증후군 상승은 학급 단위 사건일 수 있으니 과대 해석하지 마세요.\n' +
+  '다음 형식으로만 답하세요:\n' +
+  '## 한 줄 판단\n## 의심 상황 (가능성 순, 최대 3개)\n' +
+  '각 항목마다 — 의심 질환·증후군 / 그렇게 본 근거(입력의 숫자를 그대로 인용) / 이 판단을 뒤집을 수 있는 반대 근거\n' +
+  '## 감별에 필요한 추가 확인\n## 권고 조치 (교육청·학교별로 나눠서)\n## 확신도\n' +
+  '확신도는 높음/보통/낮음 중 하나와 그 이유를 한 문장으로. 데이터가 적으면 낮음으로 하세요.\n' +
+  '지켜야 할 것: ' +
+  '① 입력에 없는 수치를 만들지 마세요. 비율을 새로 계산했다면 "계산값"이라고 밝히세요. ' +
+  '② 학교는 입력에 있는 익명 코드(A교·B교…)로만 부르세요. 실제 학교명을 추측하지 마세요. ' +
+  '③ 확진 판정을 내리지 말고 "의심·가능성" 수준으로 쓰세요. 확진은 의료기관과 보건소의 몫입니다. ' +
+  '④ 데이터가 부족하면 부족하다고 쓰세요. 특이사항이 없으면 "현재 유행을 시사하는 신호 없음"이라고 쓰세요. ' +
+  '⑤ 학생 개인정보는 입력에 없으며 추정하지 마세요.'
+
 export const DEFAULT_INTERVAL_PROMPT =
   '당신은 부산시교육청 학교보건 상황실의 분석 담당입니다. 지금은 일과 중 "주기 점검 보고"입니다. ' +
   '현재 시점까지의 비식별 집계를 근거로, 직전 보고 이후 새로 나타나거나 악화된 신호만 골라 한국어로 짧게 보고하세요. ' +
@@ -72,6 +101,7 @@ export function loadAiConfig(): AiConfig {
     eveningPrompt: DEFAULT_EVENING_PROMPT,
     intervalPrompt: DEFAULT_INTERVAL_PROMPT,
     triagePrompt: DEFAULT_TRIAGE_PROMPT,
+    infectionPrompt: DEFAULT_INFECTION_PROMPT,
   }
   try {
     const o = JSON.parse(localStorage.getItem(LS_KEY) || 'null')
@@ -83,6 +113,7 @@ export function loadAiConfig(): AiConfig {
         eveningPrompt: o.eveningPrompt || base.eveningPrompt,
         intervalPrompt: o.intervalPrompt || base.intervalPrompt,
         triagePrompt: o.triagePrompt || base.triagePrompt,
+        infectionPrompt: o.infectionPrompt || base.infectionPrompt,
       }
     }
   } catch {

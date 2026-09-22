@@ -17,6 +17,7 @@ import { useOfficialAlerts } from '../data/useOfficialAlerts'
 import TrendChart from '../components/TrendChart'
 import SchoolDetail from '../components/SchoolDetail'
 import InfectionPanel from '../components/InfectionPanel'
+import InfectionAiPanel from '../components/InfectionAiPanel'
 import GradeSexChart from '../components/GradeSexChart'
 import HourlyChart from '../components/HourlyChart'
 import SideRail from '../components/SideRail'
@@ -557,6 +558,17 @@ export default function Edu() {
 
       {/* 이상 신호 · 감염병 모니터링 (통합 — 실데이터) */}
       <InfectionPanel schools={stats} rows={fRows} />
+      <InfectionAiPanel
+        schools={stats}
+        rows={fRows}
+        params={{
+          excessAlert: thresholds.inf_excess_alert,
+          excessWatch: thresholds.inf_excess_watch,
+          minCount: thresholds.inf_min,
+          regionMinCount: thresholds.inf_region_min,
+        }}
+        scopeLabel={`지역=${region} · 교육청=${office} · 학교급=${level} · 계통=${category} · 기간=${selDateLabel ?? period}`}
+      />
 
       {/* 공지 (양방향) */}
       <div className="notice-grid">
