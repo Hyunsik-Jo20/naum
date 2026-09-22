@@ -107,7 +107,7 @@ export function suggestDiseases(tileIds: string[]): Disease[] {
 export const treatmentTemplates: string[] = [
   '안정·휴식',
   '투약',
-  '체온 측정',
+  '활력징후',
   '냉·온 찜질',
   '지혈',
   '밴드·소독',

@@ -9,7 +9,7 @@ import { NoticeProvider } from './store/notices'
 import { SchoolsProvider } from './store/schools'
 import { AuthProvider } from './store/auth'
 import { registerSW } from 'virtual:pwa-register'
-import { syncSymptomsFromCloud } from './data/symptomsSync'
+import { syncSymptomsFromCloud, syncVitalItemsFromCloud } from './data/symptomsSync'
 import { SECURE_UNLOCK_EVENT } from './data/secureStore'
 import './index.css'
 
@@ -30,6 +30,11 @@ window.addEventListener(SECURE_UNLOCK_EVENT, () => {
 
 // 증상 목록 다기기 동기화 — 다른 기기(콘솔)에서 편집된 목록을 부팅 시 받아 반영.
 //  변경이 있을 때만 1회 새로고침(로컬=클라우드가 되므로 루프 없음).
+// 활력징후 항목도 부팅 시 클라우드와 맞춘다(증상 목록과 동일 패턴).
+void syncVitalItemsFromCloud().then((changed) => {
+  if (changed) window.location.reload()
+})
+
 void syncSymptomsFromCloud().then((changed) => {
   if (changed) window.location.reload()
 })

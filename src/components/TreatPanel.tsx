@@ -12,7 +12,8 @@ import {
 import { loadTreatments, saveTreatments } from '../data/treatments'
 import { aiTriage, aiConfigured } from '../data/aiTriage'
 import AiSettingsModal from './AiSettingsModal'
-import TempPickerModal from './TempPickerModal'
+import VitalsModal from './VitalsModal'
+import VitalsEditModal from './VitalsEditModal'
 import ObservePickerModal from './ObservePickerModal'
 import BodyMapModal from './BodyMapModal'
 import ItemPickerModal from './ItemPickerModal'
@@ -23,7 +24,8 @@ import { getSchool } from '../data/school'
 import { busanSchools } from '../data/busanSchools'
 import { teacherOf, staffById } from '../data/teacherRoster'
 import { useVisits } from '../store/visits'
-import type { Disease, Outcome, Visit } from '../types'
+import { VITALS_LABEL, hasVitals, vitalsSummary, vitalsFromLegacyTreatments } from '../data/vitals'
+import type { Disease, Outcome, Visit, Vitals } from '../types'
 
 const OUTCOMES: Outcome[] = ['교실 복귀', '귀가', '병원 이송', '관찰']
 
@@ -84,7 +86,11 @@ export default function TreatPanel({
   const [aiAlert, setAiAlert] = useState<string | null>(null)
   const [aiTreats, setAiTreats] = useState<string[]>([])
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false)
-  const [tempOpen, setTempOpen] = useState(false)
+  const [vitalsOpen, setVitalsOpen] = useState(false)
+  const [vitalsEditOpen, setVitalsEditOpen] = useState(false)
+  // 활력징후 — 구조화해 보관한다. 옛 기록("체온 측정 37.5℃")은 체온만 복원해 이어 쓴다.
+  const [vitals, setVitals] = useState<Vitals | null>(
+    () => visit.vitals ?? vitalsFromLegacyTreatments(visit.treatments))
   const [observeOpen, setObserveOpen] = useState(false)
   const [symOpen, setSymOpen] = useState(false) // 증상 추가·수정 패널(키오스크 오입력 정정)
   const [timeOpen, setTimeOpen] = useState(false) // 입실·퇴실 시각 수정(당일 누락분 사후 입력)
@@ -195,19 +201,17 @@ export default function TreatPanel({
     setMemo('')
   }
 
-  // 체온 측정 — 키보드 없이 모달로 값 선택. "체온 측정 37.5℃" 형태로 저장.
-  const TEMP_LABEL = '체온 측정'
-  const tempTreatment = treatments.find((t) => t.startsWith(TEMP_LABEL))
-  const curTemp = (() => {
-    const m = tempTreatment?.match(/([\d.]+)℃/)
-    return m ? Number(m[1]) : undefined
-  })()
-  function applyTemp(v: number) {
-    setTreatments((p) => [...p.filter((x) => !x.startsWith(TEMP_LABEL)), `${TEMP_LABEL} ${v.toFixed(1)}℃`])
-    setTempOpen(false)
-  }
-  function removeTemp() {
-    setTreatments((p) => p.filter((x) => !x.startsWith(TEMP_LABEL)))
+  // 활력징후 — 값은 visit.vitals에 구조화해 저장하고, 보건일지·엑셀이 그대로 읽도록
+  //  처치 목록에는 "활력징후 체온 37.5℃ · 혈압 120/80mmHg …" 한 줄 요약을 함께 넣는다.
+  const TEMP_LABEL = '체온 측정' // 옛 기록 호환(처치 목록에 남아 있을 수 있다)
+  function applyVitals(v: Vitals | null) {
+    setVitals(v)
+    const summary = vitalsSummary(v)
+    setTreatments((p) => {
+      const rest = p.filter((x) => !x.startsWith(TEMP_LABEL) && !x.startsWith(VITALS_LABEL))
+      return summary ? [...rest, summary] : rest
+    })
+    setVitalsOpen(false)
   }
 
   // 부위 있는 처치(지혈·밴드·소독) — 인체도로 부위 선택. "지혈 (이마)" 형태로 저장(A안).
@@ -323,6 +327,7 @@ export default function TreatPanel({
 <table>
   <tr><th>${visit.isStaff ? '교직원' : '학생'}</th><td>${esc2(student ? (visit.isStaff ? student.name : `${student.name} (${classLabel(student)} · ${student.number}번 · ${student.sex})`) : `${visit.grade}학년 · ${visit.sex}`)}</td></tr>
   <tr><th>호소 증상</th><td>${esc2(sym || '—')}</td></tr>
+  ${vitalsSummary(vitals) ? `<tr><th>활력징후</th><td>${esc2(vitalsSummary(vitals)!.replace(/^활력징후 /, ''))}</td></tr>` : ''}
   <tr><th>추정 병명</th><td>${esc2(dz)}</td></tr>
   <tr><th>처치 내역</th><td>${esc2(tr)}</td></tr>
   ${memoText ? `<tr><th>특이사항</th><td>${esc2(memoText)}</td></tr>` : ''}
@@ -351,6 +356,7 @@ export default function TreatPanel({
     const allTreatments = memoText ? [...treatments.filter((t) => t !== memoText), memoText] : treatments
     return {
       diseases: diseases.filter((d) => d.name.trim()),
+      vitals: vitals ?? undefined,
       treatments: allTreatments,
       outcome,
       escort: outcome === '병원 이송' ? escort : undefined,
@@ -595,15 +601,15 @@ export default function TreatPanel({
       </div>
       <div className="treat-grid">
         {treatOrder.map((t, i) => {
-          const isTemp = t === TEMP_LABEL
+          const isTemp = t === VITALS_LABEL || t === TEMP_LABEL // 옛 이름도 같은 칩으로
           const isSite = isSiteTreat(t)
           const isMed = isMedTreat(t)
           const isSupply = isSupplyTreat(t)
           const isPick = isMed || isSupply
-          const on = isTemp ? !!tempTreatment : (isSite || isPick) ? hasKind(t) : treatments.includes(t)
+          const on = isTemp ? hasVitals(vitals) : (isSite || isPick) ? hasKind(t) : treatments.includes(t)
           // 체온=값, 지혈·밴드소독=부위, 투약=약, 위생용품·비품=물품 모달. 그 외=단순 토글. 칩에 값/부위/항목 표시.
           const onClick = isTemp
-            ? () => (on ? removeTemp() : setTempOpen(true))
+            ? () => setVitalsOpen(true)
             : isSite
               ? () => setBodyMapKind(t)
               : isMed
@@ -613,8 +619,8 @@ export default function TreatPanel({
                   : () => toggleTreatment(t)
           const detailList = (isSite || isPick) ? sitesOf(t) : []
           const label =
-            isTemp && curTemp != null
-              ? `${TEMP_LABEL} ${curTemp.toFixed(1)}℃`
+            isTemp
+              ? (vitalsSummary(vitals) ?? VITALS_LABEL)
               : (isSite || isPick) && detailList.length
                 ? `${t} (${detailList.join(', ')})`
                 : t
@@ -628,7 +634,7 @@ export default function TreatPanel({
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => moveTreat(i)}
               onDragEnd={() => setDragIdx(null)}
-              title={isTemp ? '체온 값 선택' : isSite ? '처치 부위 선택' : isMed ? '투약할 약 선택' : isSupply ? '지급할 위생용품·비품 선택' : '드래그해서 순서 변경'}
+              title={isTemp ? '활력징후 입력 (체온·혈압·맥박·호흡수·산소포화도)' : isSite ? '처치 부위 선택' : isMed ? '투약할 약 선택' : isSupply ? '지급할 위생용품·비품 선택' : '드래그해서 순서 변경'}
             >
               <i className="ti ti-grip-vertical grip" aria-hidden="true" />
               {on && <i className="ti ti-check" aria-hidden="true" />} {label}
@@ -777,7 +783,15 @@ export default function TreatPanel({
         )}
       </div>
       {aiSettingsOpen && <AiSettingsModal onClose={() => setAiSettingsOpen(false)} />}
-      {tempOpen && <TempPickerModal initial={curTemp ?? 36.5} onConfirm={applyTemp} onClose={() => setTempOpen(false)} />}
+      {vitalsOpen && (
+        <VitalsModal
+          initial={vitals}
+          onConfirm={applyVitals}
+          onClose={() => setVitalsOpen(false)}
+          onEditItems={() => { setVitalsOpen(false); setVitalsEditOpen(true) }}
+        />
+      )}
+      {vitalsEditOpen && <VitalsEditModal onClose={() => setVitalsEditOpen(false)} />}
       {observeOpen && (
         <ObservePickerModal
           initialMin={observeMinutes}

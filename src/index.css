@@ -2357,3 +2357,36 @@ code.tok { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; f
 .ai-prov.on { border-color: var(--info); background: var(--info-bg); color: var(--info); font-weight: 600; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* 활력징후 입력 — 키패드 직접 입력, 참고범위를 벗어나면 빨갛게 (요청 9/22) */
+.vit-list { display: flex; flex-direction: column; gap: 6px; }
+.vit-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 1fr) auto 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.vit-row.bad { border-color: var(--danger); background: var(--danger-bg); }
+.vit-label { font-size: 14px; font-weight: 600; color: var(--text); }
+.vit-inputs { display: flex; align-items: center; gap: 4px; }
+.vit-inputs input {
+  width: 74px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 650;
+  text-align: center;
+}
+.vit-row.bad .vit-inputs input { border-color: var(--danger); color: var(--danger); }
+.vit-sep { font-size: 16px; color: var(--text-3); }
+.vit-flag { font-size: 12px; font-weight: 700; text-align: right; }
+.vit-flag.high, .vit-flag.low { color: var(--danger); }
+.vit-range { display: inline-flex; align-items: center; gap: 3px; }
+.vit-range input { padding: 5px 6px; border: 1px solid var(--border-2); border-radius: 7px; font-size: 12px; text-align: center; }

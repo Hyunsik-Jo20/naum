@@ -72,5 +72,28 @@ export interface Visit {
   calledAt?: number
   treatedAt?: number
   observeUntil?: number // 관찰 결과 시, 보건실 관찰 종료 예정 시각(epoch ms)
+  /** 활력징후 측정값 — 항목 id → 값 배열(단일 [값], 혈압 [수축기, 이완기]) */
+  vitals?: Vitals
   isStaff?: boolean // 교직원 방문(별도 집계 — 학생 통계·담임/학부모 알림 제외). grade=0으로 기록.
+}
+
+/** 활력징후 측정값. 항목 id는 vitals.ts의 VitalItem.id와 같다.
+ *  단일 항목은 [값], 혈압처럼 두 값을 재는 항목은 [수축기, 이완기]로 담는다. */
+export type Vitals = Record<string, number[]>
+
+/** 활력징후 항목 정의 — 학교가 편집할 수 있다(항목 추가·삭제·정상범위 조정). */
+export interface VitalItem {
+  id: string
+  label: string          // 체온 · 혈압 · 맥박 …
+  unit: string           // ℃ · mmHg · 회/분 · %
+  type: 'number' | 'pair' // pair = 혈압처럼 두 칸(수축기/이완기)
+  decimals: number       // 소수 자릿수 (체온 1, 나머지 0)
+  /** 정상 참고범위 — 벗어나면 화면에 강조된다. 진단 기준이 아니라 확인용 표시. */
+  low?: number
+  high?: number
+  low2?: number          // pair의 둘째 값(이완기) 범위
+  high2?: number
+  /** 입력 허용 범위(오타 방지) */
+  hardMin: number
+  hardMax: number
 }

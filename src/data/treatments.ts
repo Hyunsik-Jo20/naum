@@ -9,6 +9,8 @@ export function loadTreatments(): string[] {
   try {
     const a = JSON.parse(localStorage.getItem(LS_KEY) || 'null')
     if (Array.isArray(a)) order = a.filter((x) => typeof x === 'string')
+    // 체온만 재던 시절의 칩 이름을 새 이름으로 읽는다 (요청 9/22 — 활력징후로 확장)
+    order = order.map((t) => (t === '체온 측정' ? '활력징후' : t))
   } catch {
     /* ignore */
   }

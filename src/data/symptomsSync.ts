@@ -3,7 +3,8 @@
 //  다르면 갱신한다(true 반환 → 호출측이 새로고침해 모듈 초기화에 반영).
 //  배경: 기존에는 localStorage에만 저장되어 편집한 기기 외(키오스크 태블릿 등)에 반영되지 않았다.
 import { SUPABASE_ENABLED } from './supabaseClient'
-import { fetchCloudSymptoms } from '../api/supabaseBackend'
+import { fetchCloudSymptoms, fetchCloudVitalItems } from '../api/supabaseBackend'
+import { applyVitalItems } from './vitals'
 
 const LS = 'naum.symptoms'
 
@@ -18,6 +19,16 @@ export async function syncSymptomsFromCloud(): Promise<boolean> {
     if (cur === next) return false
     localStorage.setItem(LS, next)
     return true
+  } catch {
+    return false
+  }
+}
+
+/** 활력징후 항목도 같은 방식으로 동기화 — 콘솔에서 편집하면 다른 기기에도 반영된다. */
+export async function syncVitalItemsFromCloud(): Promise<boolean> {
+  if (!SUPABASE_ENABLED) return false
+  try {
+    return applyVitalItems(await fetchCloudVitalItems())
   } catch {
     return false
   }

@@ -2,7 +2,7 @@
 //  · 비식별 Visit 만 Supabase에 저장/구독(Realtime).
 //  · visit↔student 링크(PII)는 클라우드로 보내지 않고 로컬 스테이션(localStation)에 보관.
 //  · 화면(VisitsCtx)은 그대로 — visits.tsx 의 supabase 모드에서만 사용.
-import type { Disease, Outcome, Sex, SymptomTile, Visit, VisitStatus } from '../types'
+import type { Disease, Outcome, Sex, SymptomTile, VitalItem, Vitals, Visit, VisitStatus } from '../types'
 import { supabase } from '../data/supabaseClient'
 import { saveLink } from '../data/localStation'
 import { schoolLinkKey, encryptJson, decryptJson, type Enc } from '../data/schoolCrypto'
@@ -28,6 +28,7 @@ interface Row {
   treated_at: number | null
   observe_until: number | null
   is_staff?: boolean | null // 0015 — 교직원 방문(별도 집계). 구버전 행은 null(=학생).
+  vitals?: Vitals | null // 0016 — 활력징후(체온·혈압·맥박·호흡수·산소포화도)
 }
 
 function fromRow(r: Row): Visit {
@@ -48,6 +49,7 @@ function fromRow(r: Row): Visit {
     calledAt: r.called_at ?? undefined,
     treatedAt: r.treated_at ?? undefined,
     observeUntil: r.observe_until ?? undefined,
+    vitals: r.vitals ?? undefined,
     isStaff: r.is_staff ?? undefined,
   }
 }
@@ -58,6 +60,8 @@ function toRow(v: Visit, sch: string): Row & { school_id: string } {
     school_id: sch,
     // is_staff는 교직원일 때만 포함 — 0015 미적용 DB에서도 학생 접수는 계속 동작
     ...(v.isStaff ? { is_staff: true } : {}),
+    // 활력징후도 값이 있을 때만 — 0016 미적용 DB 보호
+    ...(v.vitals ? { vitals: v.vitals } : {}),
     grade: v.grade,
     sex: v.sex,
     symptom_tile_ids: v.symptomTileIds,
@@ -80,6 +84,7 @@ function toRow(v: Visit, sch: string): Row & { school_id: string } {
 function patchToRow(p: Partial<Visit>): Record<string, unknown> {
   const r: Record<string, unknown> = {}
   if (p.symptomTileIds !== undefined) r.symptom_tile_ids = p.symptomTileIds // 키오스크 오입력 정정
+  if (p.vitals !== undefined) r.vitals = p.vitals // 활력징후
   if (p.status !== undefined) r.status = p.status
   if (p.ticket !== undefined) r.ticket = p.ticket
   if (p.diseases !== undefined) r.diseases = p.diseases
@@ -207,6 +212,28 @@ export async function fetchCloudSymptoms(): Promise<SymptomTile[] | null> {
   if (error || !data?.symptoms) return null
   const a = data.symptoms as SymptomTile[]
   return Array.isArray(a) && a.length ? a : null
+}
+
+/** 클라우드의 학교 활력징후 항목. 없으면 null(기본 항목 사용). */
+export async function fetchCloudVitalItems(): Promise<VitalItem[] | null> {
+  const sb = supabase!
+  const { data, error } = await sb
+    .from('school_settings')
+    .select('vitals')
+    .eq('school_id', schoolId())
+    .maybeSingle()
+  if (error || !data?.vitals) return null
+  const a = data.vitals as VitalItem[]
+  return Array.isArray(a) && a.length ? a : null
+}
+
+/** 활력징후 항목을 클라우드에 저장(보건교사 전용 — RLS). */
+export async function saveCloudVitalItems(items: VitalItem[]): Promise<void> {
+  const sb = supabase!
+  const { error } = await sb
+    .from('school_settings')
+    .upsert({ school_id: schoolId(), vitals: items, updated_at: new Date().toISOString() })
+  if (error) throw new Error(`saveCloudVitalItems: ${error.message}`)
 }
 
 /** 증상 목록을 클라우드에 저장(보건교사 전용 — RLS). 편집 기기 외 다른 기기 반영용. */
