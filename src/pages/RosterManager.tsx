@@ -126,8 +126,15 @@ export default function RosterManager() {
 
   const curStats = useMemo(() => {
     const grades = new Set(students.map((s) => s.grade))
-    return { count: students.length, grades: grades.size, classes: classes.length }
+    // 남·여 인원 — 저장된 명부의 성별이 제대로 들어갔는지 여기서 바로 확인한다.
+    //  (미리보기는 새로 올릴 때만 보여서, 이미 적용된 명부는 확인할 곳이 없었다.
+    //   성별은 활력징후 혈압 참고범위를 가르므로 눈에 보여야 한다.)
+    const boys = students.filter((s) => s.sex === '남').length
+    const girls = students.filter((s) => s.sex === '여').length
+    return { count: students.length, grades: grades.size, classes: classes.length, boys, girls }
   }, [])
+  // 학생이 있는데 한쪽 성별이 0명이면 성별 열을 못 읽었을 가능성이 크다
+  const curSexSuspect = curStats.count > 0 && (curStats.boys === 0 || curStats.girls === 0)
 
   function onFile(file: File) {
     setError('')
@@ -226,6 +233,12 @@ export default function RosterManager() {
         </div>
         <div className="kpi-grid" style={{ marginBottom: 0 }}>
           <div className="kpi"><div className="kpi-label">학생 수</div><div className="kpi-val">{curStats.count}</div></div>
+          <div className="kpi">
+            <div className="kpi-label">남 · 여</div>
+            <div className="kpi-val sm" style={curSexSuspect ? { color: 'var(--danger)' } : undefined}>
+              {curStats.boys} · {curStats.girls}
+            </div>
+          </div>
           <div className="kpi"><div className="kpi-label">학년</div><div className="kpi-val">{curStats.grades}</div></div>
           <div className="kpi"><div className="kpi-label">학급(반)</div><div className="kpi-val">{curStats.classes}</div></div>
           <div className="kpi">
@@ -237,6 +250,14 @@ export default function RosterManager() {
             )}
           </div>
         </div>
+        {curSexSuspect && (
+          <div className="admin-err" style={{ marginTop: 10, lineHeight: 1.7 }}>
+            <i className="ti ti-alert-triangle" aria-hidden="true" />{' '}
+            <b>한쪽 성별이 0명</b>입니다 — 명부의 성별 열을 못 읽었을 수 있습니다.
+            성별은 <b>활력징후 혈압 참고범위</b>를 가르므로(3학년부터 남녀 상한이 다름),
+            성별 열(남/여 · M/F · 1/2)을 확인해 다시 올려 주세요.
+          </div>
+        )}
       </div>
 
       {/* 업로드 */}
