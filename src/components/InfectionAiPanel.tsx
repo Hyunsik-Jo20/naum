@@ -46,7 +46,11 @@ export default function InfectionAiPanel({
   const canRun = !!serverAi?.enabled || localKey
 
   const [loading, setLoading] = useState(false)
-  const [answer, setAnswer] = useState('')
+  const [answer, setAnswer] = useState('')      // 화면용 — 학교 실명으로 되돌린 것
+  const [answerAnon, setAnswerAnon] = useState('') // 공지용 — 익명 코드 그대로
+  // 공지로 보낼 때 학교 실명을 넣을지. 기본은 익명 — 특정 학교를 지목한 공문이
+  //  실수로 관내 전체에 나가는 것을 막는다(사용자 결정 2026-09-22).
+  const [nameInNotice, setNameInNotice] = useState(false)
   const [warnings, setWarnings] = useState<string[]>([])
   const [error, setError] = useState('')
   const [showInput, setShowInput] = useState(false)
@@ -65,7 +69,8 @@ export default function InfectionAiPanel({
     try {
       const r = await callAiSmart(cfg, cfg.infectionPrompt, brief.text)
       setWarnings(auditAiOutput(brief, r.text, schools.map((s) => s.name)))
-      setAnswer(revealCodes(r.text, brief.codeMap)) // 화면에는 실명으로
+      setAnswerAnon(r.text)                          // 익명 코드 원문 보관
+      setAnswer(revealCodes(r.text, brief.codeMap))  // 화면에는 실명으로
       setVia({ via: r.via, model: r.model, truncated: r.truncated })
       setRanAt(Date.now())
     } catch (e) {
@@ -76,6 +81,8 @@ export default function InfectionAiPanel({
   }
 
   const schoolCount = brief.codeMap.size
+  // 공지·복사에 들어갈 본문 — 기본은 익명 코드본
+  const noticeBody = nameInNotice ? answer : answerAnon
 
   return (
     <div className="card" style={{ marginTop: 16 }}>
@@ -144,12 +151,19 @@ export default function InfectionAiPanel({
           <div className="row between" style={{ marginTop: 8, flexWrap: 'wrap', gap: 8 }}>
             <span className="muted" style={{ fontSize: 11 }}>
               {ranAt && `${new Date(ranAt).toLocaleString('ko-KR')} · ${via?.model || cfg.model}`}
-              {via && ` · ${via.via === 'server' ? '서버 키' : '이 기기 키'}`} · {DISCLAIMER}
+              {via && ` · ${via.via === 'server' ? '서버 키' : '이 기기 키'}`}
+              {' · '}공지 본문은 {nameInNotice ? <b>학교 실명 포함</b> : <>학교명을 <b>코드(A교·B교…)</b>로</>} 내보냅니다.
+              {' '}{DISCLAIMER}
             </span>
-            <div className="row" style={{ gap: 8 }}>
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <label className="row no-print" style={{ gap: 4, fontSize: 11, alignItems: 'center' }}
+                title="켜면 공지 본문에 실제 학교명이 들어갑니다">
+                <input type="checkbox" checked={nameInNotice} onChange={(e) => setNameInNotice(e.target.checked)} />
+                공지에 학교명 포함
+              </label>
               <button
                 className="btn ghost small no-print"
-                onClick={() => void navigator.clipboard?.writeText(`${answer}\n\n${DISCLAIMER}`)}
+                onClick={() => void navigator.clipboard?.writeText(`${noticeBody}\n\n${DISCLAIMER}`)}
               >
                 <i className="ti ti-copy" aria-hidden="true" /> 복사
               </button>
@@ -158,7 +172,7 @@ export default function InfectionAiPanel({
                 onClick={() =>
                   openCompose({
                     title: '[학교보건] 감염병 유행 가능성 분석 안내',
-                    body: `${DISCLAIMER}\n\n${answer}`,
+                    body: `${DISCLAIMER}\n\n${noticeBody}`,
                     to: '학교',
                   })
                 }

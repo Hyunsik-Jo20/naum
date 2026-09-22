@@ -87,12 +87,18 @@ function gradeBySyndrome(rows: EduVisitRow[], now: number, days: number): Map<st
   return m
 }
 
-/** 결과 분포 — 귀가·병원 이송 비율이 중증도 대리지표. 건수가 같아도 귀가율이 뛰면 다른 상황이다. */
-function outcomeShare(rows: EduVisitRow[], from: number, to: number): { total: number; counts: Record<string, number> } {
+/** 결과 분포 — 귀가·병원 이송 비율이 중증도 대리지표. 건수가 같아도 귀가율이 뛰면 다른 상황이다.
+ *  catIdx를 주면 그 계통(증후군)만 센다. 주지 않으면 전체 방문.
+ *  ⚠ 전체 분포만 보내면 모델이 그걸 "특정 증후군 환자들의 결과"로 읽는다(2026-09-22 실사용에서 발생).
+ *    그래서 전체와 증후군별을 **둘 다, 기준을 밝혀서** 보낸다. */
+function outcomeShare(
+  rows: EduVisitRow[], from: number, to: number, catIdx?: number,
+): { total: number; counts: Record<string, number> } {
   const counts: Record<string, number> = {}
   let total = 0
   for (const r of rows) {
     if (r.createdAt < from || r.createdAt >= to) continue
+    if (catIdx != null && r.catIdx !== catIdx) continue
     if (!r.outcome) continue
     counts[r.outcome] = (counts[r.outcome] ?? 0) + 1
     total++
@@ -214,7 +220,7 @@ export function buildInfectionBrief(
   L.push(Object.entries(hb).map(([k, v]) => `${k} ${num(v)}건`).join(' · '))
   L.push('')
 
-  // ⑤ 중증도 대리지표
+  // ⑤ 중증도 대리지표 — 전체와 증후군별을 기준을 밝혀서 함께
   const cur = outcomeShare(rows, now - 7 * DAY, now)
   const prev = outcomeShare(rows, now - 35 * DAY, now - 7 * DAY)
   L.push('[5) 처치 결과 분포 — 귀가·병원 이송 비율이 중증도 대리지표]')
@@ -222,8 +228,18 @@ export function buildInfectionBrief(
     o.total === 0
       ? '기록 없음'
       : Object.entries(o.counts).map(([k, v]) => `${k} ${num(v)}건(${num(pct(v, o.total))}%)`).join(', ')
-  L.push(`최근 7일(결과 기록 ${num(cur.total)}건): ${fmt(cur)}`)
-  L.push(`직전 4주(결과 기록 ${num(prev.total)}건): ${fmt(prev)}`)
+  L.push(`※ 아래 "전체 방문" 두 줄은 모든 증상을 합친 값이다. 특정 증후군 환자의 결과로 읽지 말 것.`)
+  L.push(`전체 방문·최근 7일(결과 기록 ${num(cur.total)}건): ${fmt(cur)}`)
+  L.push(`전체 방문·직전 4주(결과 기록 ${num(prev.total)}건): ${fmt(prev)}`)
+  L.push('증후군별(최근 7일) — 증후군을 지목해 말할 때는 반드시 이 줄을 쓸 것:')
+  let anySyn = false
+  for (const sy of SYNDROMES) {
+    const o = outcomeShare(rows, now - 7 * DAY, now, sy.idx)
+    if (o.total === 0) continue
+    anySyn = true
+    L.push(`  ${sy.name}(결과 기록 ${num(o.total)}건): ${fmt(o)}`)
+  }
+  if (!anySyn) L.push('  증후군별 결과 기록 없음')
   L.push('')
 
   // ⑥ 학교 단위 — 익명 코드
@@ -282,10 +298,20 @@ export function auditAiOutput(brief: InfectionBrief, out: string, allSchoolNames
   if (leaked.length) {
     warn.push(`보내지 않은 학교명이 답변에 있습니다: ${[...new Set(leaked)].slice(0, 5).join(', ')} — 지어낸 내용일 수 있습니다.`)
   }
-  const claims = [...out.matchAll(/(\d+(?:\.\d+)?)\s*(배|건|개교|%)/g)]
-  const bad = [...new Set(claims.map((m) => m[1]).filter((v) => !brief.numbers.has(v)))]
-  if (bad.length) {
-    warn.push(`입력 자료에 없는 수치가 쓰였습니다: ${bad.slice(0, 8).join(', ')} — 근거를 확인하세요(합계·비율을 새로 계산했을 수도 있습니다).`)
+  // 배수·건수·개교만 본다. **퍼센트는 제외** — 비율은 거의 항상 파생값이라 오탐만 늘린다.
+  //  합계·평균·계산값이라고 밝힌 자리도 제외(모델에게 그렇게 표기하라고 지시해 두었다).
+  //  오탐이 잦으면 진짜 경고까지 무시하게 되므로 일부러 느슨하게 잡는다.
+  const DERIVED = /계산값|합계|합산|평균|비율|총\s*합/
+  const bad = new Set<string>()
+  for (const m of out.matchAll(/(\d+(?:\.\d+)?)\s*(배|건|개교)/g)) {
+    const v = m[1]
+    if (brief.numbers.has(v)) continue
+    const around = out.slice(Math.max(0, m.index - 40), m.index + 40)
+    if (DERIVED.test(around)) continue
+    bad.add(v)
+  }
+  if (bad.size) {
+    warn.push(`입력 자료에 없는 수치가 쓰였습니다: ${[...bad].slice(0, 8).join(', ')} — 근거를 확인하세요.`)
   }
   return warn
 }
