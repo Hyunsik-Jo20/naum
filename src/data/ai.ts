@@ -109,7 +109,9 @@ export const DEFAULT_INFECTION_PROMPT =
   '(라) 중증도 — 건수가 같아도 귀가·병원 이송 비율이 오르면 상황이 다르다. ' +
   '(마) 공간 — 같은 지역 2개교 이상이 같은 증후군으로 동시에 오르면 학교 내 전파를 넘어선 확산을 의심한다. ' +
   '(바) 단일 학교의 단일 증후군 상승은 학급 단위 사건일 수 있으니 과대 해석하지 마세요.\n' +
-  '다음 형식으로만 답하세요:\n' +
+  '다음 형식으로만 답하세요. ' +
+  '제목은 "## 제목" 한 줄로만 쓰고, 목록은 "- "로 시작하는 한 단계만 쓰세요. ' +
+  '굵게(**) 표시·중첩 목록·표는 쓰지 마세요 — 공문으로 그대로 옮겨집니다.\n' +
   '## 한 줄 판단\n## 의심 상황 (가능성 순, 최대 3개)\n' +
   '각 항목마다 — 의심 질환·증후군 / 그렇게 본 근거(입력의 숫자를 그대로 인용) / 이 판단을 뒤집을 수 있는 반대 근거\n' +
   '## 감별에 필요한 추가 확인\n## 권고 조치 (교육청·학교별로 나눠서)\n## 확신도\n' +
@@ -226,7 +228,7 @@ export async function fetchServerAi(force = false): Promise<ServerAiStatus> {
 /** 서버 미설정·권한 없음 — 로컬 키로 폴백해도 되는 상황임을 알린다. */
 class ServerAiUnavailable extends Error {}
 
-async function callAiServer(system: string, user: string): Promise<{ text: string; model: string }> {
+async function callAiServer(system: string, user: string): Promise<{ text: string; model: string; truncated: boolean }> {
   const headers: Record<string, string> = { 'content-type': 'application/json' }
   try {
     if (supabase) {
@@ -249,20 +251,22 @@ async function callAiServer(system: string, user: string): Promise<{ text: strin
   const j = await r.json().catch(() => ({}))
   // 429·413·502 등은 "서버 AI를 쓰는 중에 난 진짜 오류" — 조용히 개인 키로 넘어가면 안 된다.
   if (!r.ok) throw new Error(j.error || `${r.status} ${r.statusText}`)
-  return { text: String(j.text || '(빈 응답)'), model: String(j.model || '') }
+  return { text: String(j.text || '(빈 응답)'), model: String(j.model || ''), truncated: !!j.truncated }
 }
 
 export interface AiResult {
   text: string
   via: 'server' | 'local'
   model: string
+  /** 출력 토큰 한도에 걸려 글이 중간에서 끊겼는지 — 화면이 경고를 띄운다. */
+  truncated?: boolean
 }
 
 /** 서버 우선 → 안 되면 브라우저에 저장된 개인 키. 어느 쪽으로 갔는지 함께 돌려준다. */
 export async function callAiSmart(cfg: AiConfig, system: string, user: string): Promise<AiResult> {
   try {
     const r = await callAiServer(system, user)
-    return { text: r.text, via: 'server', model: r.model }
+    return { text: r.text, via: 'server', model: r.model, truncated: r.truncated }
   } catch (e) {
     if (!(e instanceof ServerAiUnavailable)) throw e
   }
@@ -305,7 +309,7 @@ export async function callAi(cfg: AiConfig, system: string, user: string): Promi
       },
       body: JSON.stringify({
         model: cfg.model,
-        max_tokens: 1024,
+        max_tokens: 8192,
         temperature: 0.3,
         system,
         messages: [{ role: 'user', content: user }],

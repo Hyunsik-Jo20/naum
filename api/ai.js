@@ -15,7 +15,9 @@
 const sbUrl = () => process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 
 const MAX_INPUT = 24_000 // system+user 합계 상한(자). 브리프가 ~1.5KB라 넉넉하되 폭주는 막는다.
-const MAX_OUTPUT_TOKENS = 2048
+// Gemini 3.x 같은 추론 모델은 **내부 추론 토큰도 이 한도에 포함**된다.
+//  2048로 잡았더니 추론에 대부분 쓰고 본문이 문장 중간에서 잘렸다(2026-09-22 실사용에서 확인).
+const MAX_OUTPUT_TOKENS = 8192
 const ALLOWED_ROLES = new Set(['edu', 'nurse'])
 
 // 타 사이트에서 남의 키로 토큰을 태우지 못하게. (헤더가 없으면 통과 — proxy.js와 동일 규칙)
@@ -103,7 +105,10 @@ async function generate({ provider, apiKey, model, baseUrl }, system, user) {
     })
     if (!r.ok) throw new Error(await readError(r))
     const j = await r.json()
-    return (j.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') ?? '').trim()
+    const cand = j.candidates?.[0]
+    const text = (cand?.content?.parts?.map((p) => p.text).filter(Boolean).join('') ?? '').trim()
+    // MAX_TOKENS면 문장 중간에서 끊긴 글이 그대로 화면에 나가므로 반드시 알려야 한다.
+    return { text, truncated: cand?.finishReason === 'MAX_TOKENS' }
   }
 
   if (provider === 'anthropic') {
@@ -120,7 +125,10 @@ async function generate({ provider, apiKey, model, baseUrl }, system, user) {
     })
     if (!r.ok) throw new Error(await readError(r))
     const j = await r.json()
-    return (j.content?.map((c) => c.text ?? '').join('') ?? '').trim()
+    return {
+      text: (j.content?.map((c) => c.text ?? '').join('') ?? '').trim(),
+      truncated: j.stop_reason === 'max_tokens',
+    }
   }
 
   // openai · custom (OpenAI 호환)
@@ -137,7 +145,10 @@ async function generate({ provider, apiKey, model, baseUrl }, system, user) {
   })
   if (!r.ok) throw new Error(await readError(r))
   const j = await r.json()
-  return (j.choices?.[0]?.message?.content ?? '').trim()
+  return {
+    text: (j.choices?.[0]?.message?.content ?? '').trim(),
+    truncated: j.choices?.[0]?.finish_reason === 'length',
+  }
 }
 
 export default async function handler(req, res) {
@@ -194,9 +205,14 @@ export default async function handler(req, res) {
   if (system.length + user.length > MAX_INPUT) return res.status(413).json({ error: '입력이 너무 깁니다.' })
 
   try {
-    const text = await generate(cfg, system, user)
+    const out = await generate(cfg, system, user)
     res.setHeader('Cache-Control', 'no-store')
-    return res.status(200).json({ text: text || '(빈 응답)', model: cfg.model, provider: cfg.provider })
+    return res.status(200).json({
+      text: out.text || '(빈 응답)',
+      truncated: !!out.truncated,
+      model: cfg.model,
+      provider: cfg.provider,
+    })
   } catch (e) {
     return res.status(502).json({ error: e instanceof Error ? e.message : 'AI 호출 실패' })
   }

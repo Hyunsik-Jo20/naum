@@ -15,6 +15,7 @@ import { auditAiOutput, buildInfectionBrief, revealCodes } from '../data/infecti
 import type { EduSchoolStats, EduVisitRow } from '../data/eduLive'
 import type { SurvParams } from '../data/surveillance'
 import { useNotices } from '../store/notices'
+import AiAnswer from './AiAnswer'
 
 const DISCLAIMER =
   '※ 이 내용은 나음의 비식별 집계를 바탕으로 한 AI 보조 해석입니다. 확진·확정 판단이 아니며, '
@@ -50,7 +51,7 @@ export default function InfectionAiPanel({
   const [error, setError] = useState('')
   const [showInput, setShowInput] = useState(false)
   const [ranAt, setRanAt] = useState<number | null>(null)
-  const [via, setVia] = useState<{ via: 'server' | 'local'; model: string } | null>(null)
+  const [via, setVia] = useState<{ via: 'server' | 'local'; model: string; truncated?: boolean } | null>(null)
 
   const brief = useMemo(
     () => buildInfectionBrief(rows, schools, params, scopeLabel),
@@ -65,7 +66,7 @@ export default function InfectionAiPanel({
       const r = await callAiSmart(cfg, cfg.infectionPrompt, brief.text)
       setWarnings(auditAiOutput(brief, r.text, schools.map((s) => s.name)))
       setAnswer(revealCodes(r.text, brief.codeMap)) // 화면에는 실명으로
-      setVia({ via: r.via, model: r.model })
+      setVia({ via: r.via, model: r.model, truncated: r.truncated })
       setRanAt(Date.now())
     } catch (e) {
       setError(e instanceof Error ? e.message : '분석 실패')
@@ -103,16 +104,10 @@ export default function InfectionAiPanel({
         학생 개인정보는 애초에 서버에 없습니다.
       </p>
 
-      {serverAi?.enabled ? (
-        <div className="muted" style={{ fontSize: 11, marginBottom: 10 }}>
-          <i className="ti ti-server-bolt" style={{ verticalAlign: -2 }} aria-hidden="true" />{' '}
-          서버에 등록된 AI 키로 호출합니다({serverAi.model}) — 이 브라우저에는 키가 저장되지 않습니다.
-        </div>
-      ) : localKey ? (
+      {serverAi?.enabled ? null : localKey ? (
         <div className="muted" style={{ fontSize: 11, marginBottom: 10 }}>
           <i className="ti ti-key" style={{ verticalAlign: -2 }} aria-hidden="true" />{' '}
-          이 기기에 저장된 개인 키로 호출합니다({cfg.model}). 서버(Vercel)에 <code>AI_API_KEY</code>를 등록하면
-          기기마다 키를 넣지 않아도 되고 키가 브라우저에 남지 않습니다.
+          이 기기에 저장된 개인 키로 호출합니다({cfg.model}).
         </div>
       ) : (
         <div className="admin-err" style={{ marginBottom: 10 }}>
@@ -139,7 +134,13 @@ export default function InfectionAiPanel({
 
       {answer && (
         <>
-          <pre className="ai-answer">{answer}</pre>
+          {via?.truncated && (
+            <div className="admin-err" style={{ margin: '10px 0', lineHeight: 1.7 }}>
+              <i className="ti ti-scissors" aria-hidden="true" /> <b>답변이 도중에 끊겼습니다</b> —
+              모델의 출력 한도에 걸렸습니다. 아래 글은 미완성이니 그대로 공지로 보내지 마시고 다시 분석해 주세요.
+            </div>
+          )}
+          <div className="ai-answer"><AiAnswer text={answer} /></div>
           <div className="row between" style={{ marginTop: 8, flexWrap: 'wrap', gap: 8 }}>
             <span className="muted" style={{ fontSize: 11 }}>
               {ranAt && `${new Date(ranAt).toLocaleString('ko-KR')} · ${via?.model || cfg.model}`}
