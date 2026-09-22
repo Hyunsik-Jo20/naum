@@ -18,12 +18,43 @@ export interface AiProviderInfo {
   needsBaseUrl?: boolean
 }
 
+// ⚠ 모델 ID는 제공자가 예고 후 **종료**한다. 기본값이 죽으면 AI 기능 전체가 404로 조용히 멈춘다.
+//   2026-09-22: 기본값이던 `gemini-2.0-flash`가 구글 문서의 "이전 모델(종료됨)" 표로 내려가 있었다.
+//   아래 값을 바꿀 때는 제공자 문서에서 **안정(stable) 등급인지 확인**하고 RETIRED_MODELS도 함께 갱신할 것.
 export const AI_PROVIDERS: AiProviderInfo[] = [
-  { id: 'gemini', name: 'Google Gemini', defaultModel: 'gemini-2.0-flash', keyHint: 'AI Studio API 키' },
+  // 확인: ai.google.dev/gemini-api/docs/models — 안정 등급 (2026-09-22)
+  { id: 'gemini', name: 'Google Gemini', defaultModel: 'gemini-3.5-flash', keyHint: 'AI Studio API 키' },
+  // ※ 미확인 — OpenAI 문서 접근이 막혀 대조하지 못했다. 실패하면 설정창에서 모델명을 고칠 것.
   { id: 'openai', name: 'OpenAI', defaultModel: 'gpt-4o-mini', keyHint: 'sk-...' },
-  { id: 'anthropic', name: 'Anthropic Claude', defaultModel: 'claude-3-5-haiku-latest', keyHint: 'sk-ant-...' },
+  { id: 'anthropic', name: 'Anthropic Claude', defaultModel: 'claude-haiku-4-5-20251001', keyHint: 'sk-ant-...' },
   { id: 'custom', name: '커스텀 (OpenAI 호환)', defaultModel: '', keyHint: 'API 키', needsBaseUrl: true },
 ]
+
+/** 제공자가 종료한 모델 ID — 저장된 설정에 이게 남아 있으면 그 제공자의 기본값으로 자동 이전한다.
+ *  (이미 설정해 둔 보건교사가 아무것도 안 해도 계속 동작하게. 종료 확인된 것만 넣을 것.) */
+const RETIRED_MODELS = new Set([
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
+  'gemini-3.1-flash-lite-preview',
+  'gemini-3-pro-preview',
+  'claude-3-5-haiku-latest',
+  'claude-3-5-sonnet-latest',
+  'claude-3-haiku-20240307',
+  'claude-3-opus-latest',
+])
+
+export function defaultModelOf(provider: AiProvider): string {
+  return AI_PROVIDERS.find((p) => p.id === provider)?.defaultModel ?? ''
+}
+
+/** 저장된 모델이 종료된 것이면 현재 기본값으로 바꿔 준다. 커스텀 제공자는 손대지 않는다. */
+export function migrateModel(provider: AiProvider, model: string): string {
+  if (provider === 'custom') return model
+  if (!model || RETIRED_MODELS.has(model)) return defaultModelOf(provider) || model
+  return model
+}
 
 export interface AiConfig {
   provider: AiProvider
@@ -102,7 +133,7 @@ export function loadAiConfig(): AiConfig {
   const base: AiConfig = {
     provider: 'gemini',
     apiKey: '',
-    model: 'gemini-2.0-flash',
+    model: defaultModelOf('gemini'),
     morningPrompt: DEFAULT_MORNING_PROMPT,
     eveningPrompt: DEFAULT_EVENING_PROMPT,
     intervalPrompt: DEFAULT_INTERVAL_PROMPT,
@@ -115,6 +146,8 @@ export function loadAiConfig(): AiConfig {
       return {
         ...base,
         ...o,
+        // 종료된 모델 ID로 저장돼 있으면 자동 이전 — 안 그러면 호출이 404로 조용히 실패한다.
+        model: migrateModel(o.provider, o.model),
         morningPrompt: o.morningPrompt || base.morningPrompt,
         eveningPrompt: o.eveningPrompt || base.eveningPrompt,
         intervalPrompt: o.intervalPrompt || base.intervalPrompt,
