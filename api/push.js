@@ -119,9 +119,12 @@ export default async function handler(req, res) {
         if (m2) count = Math.max(1, Number(m2[1]))
       } catch { /* 개수 없이 발송 */ }
 
+      // 학교명(표시용) — 클라이언트 번들 명부의 이름. visitId 검증을 통과한 호출만 여기 오므로 표시에만 쓴다.
+      //  제어문자 제거·길이 제한. 없으면 학교명 없이 기존 제목.
+      const schName = String(body.schoolName || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 30)
       webpush.setVapidDetails(SUBJECT, PUB, PRIV)
       const payload = JSON.stringify({
-        title: '보건실 새 접수',
+        title: schName ? `[${schName}] 보건실 새 접수` : '보건실 새 접수',
         body: count != null ? `보건실에 온 학생 ${count}명 — 콘솔에서 확인하세요.` : '새 접수가 도착했어요. 콘솔에서 확인하세요.',
         count: count ?? undefined,
         url: '/nurse/queue',

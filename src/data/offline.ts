@@ -9,6 +9,7 @@ import type { Visit } from '../types'
 import type { ClassPayload } from './station'
 import * as sb from '../api/supabaseBackend'
 import * as relay from '../api/supabaseRelay'
+import { schoolNameById } from './school'
 
 export type OutboxOp =
   // schoolId: 접수(enqueue) 시점의 학교 — flush가 늦어져 기기 학교가 바뀌어도 오귀속 방지.
@@ -126,7 +127,8 @@ function notifyNurse(visit: Visit, sch: string | undefined): void {
   void fetch('/api/push', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'notify', schoolId: sch, visitId: visit.id }),
+    // schoolName: 알림 제목 표시용(번들 학교 명부). 여러 학교 계정을 쓰는 기기에서 어느 학교 접수인지 구분.
+    body: JSON.stringify({ action: 'notify', schoolId: sch, visitId: visit.id, schoolName: schoolNameById(sch) }),
   }).catch(() => {})
 }
 
