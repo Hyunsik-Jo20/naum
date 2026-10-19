@@ -21,7 +21,7 @@ import HeaderWeather from './components/HeaderWeather'
 import { NoticeBell, SettingsMenu } from './components/TopbarMenus'
 import { useNotices } from './store/notices'
 import { useAuth, type Role } from './store/auth'
-import { ensurePushPermission } from './push'
+import { ensurePushPermission, resyncRemotePush } from './push'
 import { applyAccent, loadScale, UI_PREFS_EVENT } from './data/uiPrefs'
 
 function Protected({ allow, children }: { allow: Role[]; children: ReactNode }) {
@@ -52,6 +52,12 @@ export default function App() {
     window.addEventListener(UI_PREFS_EVENT, h)
     return () => window.removeEventListener(UI_PREFS_EVENT, h)
   }, [])
+
+  // 접수 푸시 구독의 학교를 현재 보건교사 학교로 맞춤 — 이전 학교(예: 테스트초)로 남은 구독 정정.
+  const nurseSchool = session?.role === 'nurse' ? session.schoolId ?? 'demo' : null
+  useEffect(() => {
+    if (nurseSchool) void resyncRemotePush()
+  }, [nurseSchool])
 
   return (
     <div

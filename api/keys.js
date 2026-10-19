@@ -28,7 +28,7 @@ function verifyLoginToken(token, secret) {
 // 학교 id 형식(token.js와 동일 규칙)
 const SCH_RE = /^[a-z0-9_-]{1,32}$/i
 
-/** 호출자가 보건교사면 { sch }(자기 학교) 반환, 아니면 null.
+/** 호출자가 보건교사면 { sch }(자기 학교), 담임(JWT)이면 { sch, teacher } 반환, 아니면 null.
  *  edu는 제외 — 교육청은 비식별 집계만 보므로 복호 키가 필요 없다(최소권한).
  *  멀티테넌트: 키는 항상 호출자의 학교로만 파생되므로 타 학교 키 획득 불가. */
 async function callerNurseSchool(req, SB_URL, SERVICE, ANON) {
@@ -40,12 +40,18 @@ async function callerNurseSchool(req, SB_URL, SERVICE, ANON) {
     if (!ur.ok) return null
     const user = await ur.json()
     if (!user?.id) return null
-    const pr = await fetch(`${SB_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=role,school_id`, { headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` } })
+    const pr = await fetch(`${SB_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=role,school_id,grade,class_no`, { headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` } })
     if (!pr.ok) return null
     const rows = await pr.json()
     const row = Array.isArray(rows) ? rows[0] : null
-    if (!row || row.role !== 'nurse') return null
-    return { sch: SCH_RE.test(String(row.school_id || '')) ? String(row.school_id) : 'demo' }
+    if (!row) return null
+    const sch = SCH_RE.test(String(row.school_id || '')) ? String(row.school_id) : 'demo'
+    if (row.role === 'nurse') return { sch }
+    // 담임(학년·반+비밀번호 로그인) — 서명 토큰이 없어 예전엔 항상 403 → 학교 구분 없는 로컬 폴백 키로
+    //  수신해, 다른 학교·테스트초 접수가 섞이고 정작 자기 학교 접수는 못 받았다. 프로필의 반으로 교사 권한 부여.
+    if (row.role === 'teacher' && Number(row.grade) && Number(row.class_no))
+      return { sch, teacher: { r: 't', g: Number(row.grade), c: Number(row.class_no), sch } }
+    return null
   } catch { return null }
 }
 
@@ -85,10 +91,12 @@ export default async function handler(req, res) {
   if (!MASTER || !SB_URL || !SERVICE) return res.status(501).json({ error: 'not_configured' })
 
   const body = await readBody(req)
-  const nurseP = await callerNurseSchool(req, SB_URL, SERVICE, ANON)
+  const caller = await callerNurseSchool(req, SB_URL, SERVICE, ANON)
+  const nurseP = caller && !caller.teacher ? caller : null
   const nurse = !!nurseP
-  const tok = !nurse && body.token && TOKEN_SECRET ? verifyLoginToken(body.token, TOKEN_SECRET) : null
-  // 키 스코프 학교 — 보건교사=자기 학교, 교사/학부모=토큰의 sch(서버 서명이라 신뢰). 구토큰은 demo.
+  // 교사 JWT(프로필 반)는 서명 토큰과 같은 형태로 취급. 그 외엔 서명 토큰 검증.
+  const tok = caller?.teacher ?? (!nurse && body.token && TOKEN_SECRET ? verifyLoginToken(body.token, TOKEN_SECRET) : null)
+  // 키 스코프 학교 — 보건교사=자기 학교, 교사/학부모=프로필·토큰의 sch(서버 확인값). 구토큰은 demo.
   const sch = nurseP?.sch ?? (SCH_RE.test(String(tok?.sch || '')) ? String(tok.sch) : 'demo')
   // 파생 입력에 학교 프리픽스 — 학교마다 다른 키 공간(클라이언트 프로토콜·응답 형태는 불변).
   const scoped = (ns) => `${sch}|${ns}`

@@ -9,6 +9,7 @@
 //  설정·큐는 이 기기(보건실 콘솔)에 저장. 담임 알림은 이 설정과 무관하게 항상 실시간.
 import type { ClassPayload } from './station'
 import * as offline from './offline'
+import { schoolId } from './school'
 
 export type ParentNotifyMode = 'realtime' | 'daily1' | 'daily2' | 'hourly'
 
@@ -49,7 +50,7 @@ export function parentNotifySummary(c: ParentNotifyConfig = loadParentNotify()):
   }
 }
 
-interface PendingParent { studentId: string; payload: ClassPayload; ts: number }
+interface PendingParent { studentId: string; payload: ClassPayload; ts: number; schoolId?: string }
 
 function loadQueue(): PendingParent[] {
   try { const a = JSON.parse(localStorage.getItem(LS_QUEUE) || '[]'); return Array.isArray(a) ? a : [] } catch { return [] }
@@ -63,10 +64,10 @@ export function pendingCount(): number { return loadQueue().length }
 /** 학부모 알림 1건 — 실시간이면 즉시 발신(offline), 배치면 큐에 적재(스케줄러가 발신). */
 export function emitParent(studentId: string, payload: ClassPayload, ts: number): void {
   if (loadParentNotify().mode === 'realtime') {
-    offline.run({ type: 'emitStudent', studentId, payload, ts })
+    offline.run({ type: 'emitStudent', studentId, payload, ts, schoolId: schoolId() })
     return
   }
-  saveQueue([...loadQueue(), { studentId, payload, ts }])
+  saveQueue([...loadQueue(), { studentId, payload, ts, schoolId: schoolId() }])
 }
 
 /** 오늘 기준 스케줄 발송 시각(자정 이후 분). hourly는 매 정각. */
@@ -99,7 +100,7 @@ export function flushDue(now: number = Date.now()): number {
 
   const q = loadQueue()
   saveQueue([]) // 먼저 비우고(중복 발신 방지) 발신
-  for (const it of q) offline.run({ type: 'emitStudent', studentId: it.studentId, payload: it.payload, ts: it.ts })
+  for (const it of q) offline.run({ type: 'emitStudent', studentId: it.studentId, payload: it.payload, ts: it.ts, schoolId: it.schoolId })
   try { localStorage.setItem(LS_LAST, String(lastPassedEpoch)) } catch { /* ignore */ }
   return q.length
 }

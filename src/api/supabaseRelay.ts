@@ -19,27 +19,49 @@ import { schoolId } from '../data/school'
 export type { ClassPayload }
 export interface RelayEvent { studentToken: string; enc: Enc; ts: number }
 
-// ── 발신(스테이션/키오스크 측) ──
-/** 반 채널로 한 이벤트 발신(암호화). */
-export async function emitClass(grade: number, classNo: number, studentId: string, payload: ClassPayload, ts: number) {
+// ── 학교 스코프(0017) ──
+//  relay_class/student_inbox에는 원래 학교 칸이 없어, 토큰이 같아지면(키 서버 폴백 등) 다른 학교·
+//  테스트초 접수가 남의 반 담임·학부모 화면(+보건교사 '잃어버린 접수 찾기')에 섞였다.
+//  발신에 school_id를 찍고 수신을 school_id로 거른다. 0017 미적용 DB에서는 컬럼 없이 기존 동작(무중단).
+type PgErr = { code?: string; message?: string } | null
+const missingSchoolCol = (e: PgErr) =>
+  !!e && (e.code === 'PGRST204' || e.code === '42703') && /school_id/.test(e.message ?? '')
+
+async function insertScoped(table: string, row: Record<string, unknown>, sch: string): Promise<PgErr> {
   const sb = supabase!
+  const { error } = await sb.from(table).insert({ ...row, school_id: sch })
+  if (!missingSchoolCol(error)) return error
+  return (await sb.from(table).insert(row)).error // 0017 미적용 — 학교 칸 없이
+}
+
+async function selectScoped<T>(table: string, cols: string, col: string, val: string): Promise<T[] | null> {
+  const sb = supabase!
+  const q = () => sb.from(table).select(cols).eq(col, val)
+  const r = await q().eq('school_id', schoolId()).order('ts', { ascending: false })
+  if (!missingSchoolCol(r.error)) return r.error ? null : ((r.data ?? []) as T[])
+  const r2 = await q().order('ts', { ascending: false }) // 0017 미적용
+  return r2.error ? null : ((r2.data ?? []) as T[])
+}
+
+// ── 발신(스테이션/키오스크 측) ──
+/** 반 채널로 한 이벤트 발신(암호화). sch = 접수 시점 학교(큐 지연 중 기기 학교가 바뀌어도 오귀속 방지). */
+export async function emitClass(grade: number, classNo: number, studentId: string, payload: ClassPayload, ts: number, sch: string = schoolId()) {
   const [classToken, studentToken, enc] = await Promise.all([
     schoolClassToken(grade, classNo),
     schoolStudentToken(studentId),
     schoolClassKey(grade, classNo).then((k) => encryptJson(k, payload)),
   ])
-  const { error } = await sb.from('relay_class_inbox').insert({ class_token: classToken, student_token: studentToken, enc, ts })
+  const error = await insertScoped('relay_class_inbox', { class_token: classToken, student_token: studentToken, enc, ts }, sch)
   if (error) throw new Error(`emitClass: ${error.message}`) // 오프라인 큐 재시도 위해 전파
 }
 
 /** 학생(보호자) 채널로 한 이벤트 발신(암호화). */
-export async function emitStudent(studentId: string, payload: ClassPayload, ts: number) {
-  const sb = supabase!
+export async function emitStudent(studentId: string, payload: ClassPayload, ts: number, sch: string = schoolId()) {
   const [studentToken, enc] = await Promise.all([
     schoolStudentToken(studentId),
     schoolStudentKey(studentId).then((k) => encryptJson(k, payload)),
   ])
-  const { error } = await sb.from('relay_student_inbox').insert({ student_token: studentToken, enc, ts })
+  const error = await insertScoped('relay_student_inbox', { student_token: studentToken, enc, ts }, sch)
   if (error) throw new Error(`emitStudent: ${error.message}`) // 오프라인 큐 재시도 위해 전파
 }
 
@@ -61,16 +83,13 @@ function dedupe(evs: DecEvent[]): DecEvent[] {
 
 /** 담임: 우리 반 채널 수신 + 반 키로 복호화. */
 export async function loadClassEvents(grade: number, classNo: number): Promise<DecEvent[]> {
-  const sb = supabase!
   const [classToken, key] = await Promise.all([schoolClassToken(grade, classNo), schoolClassKey(grade, classNo)])
-  const { data, error } = await sb
-    .from('relay_class_inbox')
-    .select('student_token, enc, ts')
-    .eq('class_token', classToken)
-    .order('ts', { ascending: false })
-  if (error || !data) return []
+  const data = await selectScoped<{ student_token: string; enc: Enc; ts: number }>(
+    'relay_class_inbox', 'student_token, enc, ts', 'class_token', classToken,
+  )
+  if (!data) return []
   const dec = await Promise.all(
-    (data as { student_token: string; enc: Enc; ts: number }[]).map(async (r) => ({
+    data.map(async (r) => ({
       studentToken: r.student_token,
       ts: r.ts,
       payload: await decryptJson<ClassPayload>(key, r.enc).catch(() => null),
@@ -81,16 +100,11 @@ export async function loadClassEvents(grade: number, classNo: number): Promise<D
 
 /** 학부모: 자녀 채널 수신 + 학생 키로 복호화. */
 export async function loadStudentEvents(studentId: string): Promise<DecEvent[]> {
-  const sb = supabase!
   const [studentToken, key] = await Promise.all([schoolStudentToken(studentId), schoolStudentKey(studentId)])
-  const { data, error } = await sb
-    .from('relay_student_inbox')
-    .select('enc, ts')
-    .eq('student_token', studentToken)
-    .order('ts', { ascending: false })
-  if (error || !data) return []
+  const data = await selectScoped<{ enc: Enc; ts: number }>('relay_student_inbox', 'enc, ts', 'student_token', studentToken)
+  if (!data) return []
   const dec = await Promise.all(
-    (data as { enc: Enc; ts: number }[]).map(async (r) => ({
+    data.map(async (r) => ({
       studentToken,
       ts: r.ts,
       payload: await decryptJson<ClassPayload>(key, r.enc).catch(() => null),

@@ -20,9 +20,13 @@ const toB64 = (b: Uint8Array) => btoa(String.fromCharCode(...b))
 const fromB64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0))
 const toHex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0')).join('')
 
-// 로컬 파생(폴백) — 기존 알고리즘과 바이트 동일.
-const localKeyB64 = async (ns: string) => toB64(await sha256bytes(`${SECRET}:${ns}`))
-const localTokenHex = async (input: string) => toHex(await sha256bytes(`${SECRET}:token:${input}`)).slice(0, 32)
+// 로컬 파생(폴백). Phase 2 이후 SECRET은 번들 고정값('naum-school-demo')이라 학교 구분이 없다 —
+//  반·학생 알림(class:/student:)까지 그대로 쓰면 모든 학교의 "1학년 1반" 토큰·키가 같아져
+//  다른 학교(테스트초 포함) 접수가 섞였다. 그래서 알림용 폴백은 학교 id로 스코프한다.
+//  'links'(로컬 명부·캐시 암호화 후보)는 기존 암호문 복호를 위해 기존 알고리즘(바이트 동일) 유지.
+const scopeNs = (ns: string) => (ns === 'links' ? ns : `${schoolId()}|${ns}`)
+const localKeyB64 = async (ns: string) => toB64(await sha256bytes(`${SECRET}:${scopeNs(ns)}`))
+const localTokenHex = async (input: string) => toHex(await sha256bytes(`${SECRET}:token:${scopeNs(input)}`)).slice(0, 32)
 
 // ── 리소스(키+토큰) 조회: 서버 발급 우선, 폴백 로컬 ──
 type Res = { key?: string; token?: string }
@@ -91,7 +95,7 @@ async function keyOf(ns: string): Promise<CryptoKey> {
   if (memo) return memo
   const p = (async () => {
     const res = await fetchResource(ns, 'key')
-    const raw = res.key ? fromB64(res.key) : await sha256bytes(`${SECRET}:${ns}`) // 방어적 폴백
+    const raw = res.key ? fromB64(res.key) : await sha256bytes(`${SECRET}:${scopeNs(ns)}`) // 방어적 폴백
     return crypto.subtle.importKey('raw', raw as unknown as BufferSource, 'AES-GCM', false, ['encrypt', 'decrypt'])
   })()
   memKey.set(memoKey, p)

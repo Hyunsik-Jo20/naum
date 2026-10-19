@@ -9,6 +9,7 @@ import { supabase, SUPABASE_ENABLED } from '../data/supabaseClient'
 import { verifyLoginToken, serverSignupNurse, serverSignupTeacher } from '../data/tokenApi'
 import { setTokenAuth, clearKeyCache } from '../data/schoolCrypto'
 import { setSchool, schoolNameById, schoolId } from '../data/school'
+import { detachRemotePush } from '../push'
 
 export { SUPABASE_ENABLED }
 
@@ -333,9 +334,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout: () => {
         clearKeyCache() // 스코프 키·토큰 캐시 제거
         if (SUPABASE_ENABLED && supabase) {
+          const sb = supabase
           cacheTokenSession(null) // 교사/학부모 토큰 세션
           cacheSession(null)
-          void supabase.auth.signOut()
+          // 접수 푸시 서버 구독 해제(JWT가 필요하므로 signOut 전에) — 로그아웃한 기기로 푸시가 계속 가지 않게.
+          void detachRemotePush().finally(() => void sb.auth.signOut())
           setSession(null)
         } else {
           persist(null)

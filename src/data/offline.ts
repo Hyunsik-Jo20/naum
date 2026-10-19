@@ -13,11 +13,13 @@ import * as relay from '../api/supabaseRelay'
 export type OutboxOp =
   // schoolId: 접수(enqueue) 시점의 학교 — flush가 늦어져 기기 학교가 바뀌어도 오귀속 방지.
   //  구버전 큐 항목(schoolId 없음)은 flush 시점의 현재 학교로 폴백.
-  | { type: 'createVisit'; visit: Visit; studentId: string; schoolId?: string }
+  //  notify: 저장 성공 후 보건교사 폰 푸시 발송(서버가 방금 저장된 방문인지 확인 후 발송).
+  | { type: 'createVisit'; visit: Visit; studentId: string; schoolId?: string; notify?: boolean }
   | { type: 'patchVisit'; id: string; patch: Partial<Visit> }
   | { type: 'deleteVisit'; id: string }
-  | { type: 'emitClass'; grade: number; classNo: number; studentId: string; payload: ClassPayload; ts: number }
-  | { type: 'emitStudent'; studentId: string; payload: ClassPayload; ts: number }
+  // schoolId: 담임·학부모 알림도 발신 시점 학교로 스탬프(relay 수신 시 학교 스코프 — 0017).
+  | { type: 'emitClass'; grade: number; classNo: number; studentId: string; payload: ClassPayload; ts: number; schoolId?: string }
+  | { type: 'emitStudent'; studentId: string; payload: ClassPayload; ts: number; schoolId?: string }
 
 type Entry = { id: string; op: OutboxOp; tries: number }
 
@@ -116,18 +118,32 @@ export function onChange(cb: () => void): () => void {
   return () => listeners.delete(cb)
 }
 
+/** 보건교사 폰 푸시(베스트에포트) — 방문이 서버에 저장된 "뒤"에만 호출한다.
+ *  서버(/api/push)는 그 학교에 이 방문 id가 방금(±10분) 저장됐는지 확인하고 발송하므로,
+ *  오래 밀렸다 업로드된 접수나 학교가 어긋난 호출은 푸시되지 않는다. */
+function notifyNurse(visit: Visit, sch: string | undefined): void {
+  if (!sch || Date.now() - visit.createdAt > 10 * 60000) return
+  void fetch('/api/push', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'notify', schoolId: sch, visitId: visit.id }),
+  }).catch(() => {})
+}
+
 async function exec(op: OutboxOp): Promise<void> {
   switch (op.type) {
     case 'createVisit':
-      return sb.createVisit(op.visit, op.studentId, op.schoolId)
+      await sb.createVisit(op.visit, op.studentId, op.schoolId)
+      if (op.notify) notifyNurse(op.visit, op.schoolId)
+      return
     case 'patchVisit':
       return sb.patchVisit(op.id, op.patch)
     case 'deleteVisit':
       return sb.deleteVisit(op.id)
     case 'emitClass':
-      return relay.emitClass(op.grade, op.classNo, op.studentId, op.payload, op.ts)
+      return relay.emitClass(op.grade, op.classNo, op.studentId, op.payload, op.ts, op.schoolId)
     case 'emitStudent':
-      return relay.emitStudent(op.studentId, op.payload, op.ts)
+      return relay.emitStudent(op.studentId, op.payload, op.ts, op.schoolId)
   }
 }
 

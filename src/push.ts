@@ -94,6 +94,55 @@ export async function subscribeRemotePush(): Promise<RemotePushResult> {
   }
 }
 
+/** 현재 구독(없으면 null). 서비스워커가 등록되지 않은 기기에서는 ready가 끝나지 않으므로 시간 제한. */
+async function currentSub(): Promise<PushSubscription | null> {
+  const reg = await Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<null>((r) => setTimeout(() => r(null), 2000)),
+  ])
+  return reg ? reg.pushManager.getSubscription() : null
+}
+
+/** 이 기기의 기존 구독을 현재 로그인한 보건교사의 학교로 다시 등록.
+ *  배경: 서버 구독(push_subs)의 학교는 "켤 때" 한 번만 기록됐다. 연수 때 테스트초(demo)로 켠 폰이
+ *  이후 실학교로 로그인해도 demo로 남아, 테스트초 시뮬레이션 접수가 그 폰으로 푸시됐다.
+ *  보건교사 세션이 확인될 때마다 호출해 서버의 학교를 현재 학교로 맞춘다(구독이 없으면 아무것도 안 함). */
+export async function resyncRemotePush(): Promise<void> {
+  if (!remotePushSupported()) return
+  try {
+    const sub = await currentSub()
+    if (!sub) return
+    const jwt = supabase ? (await supabase.auth.getSession()).data.session?.access_token : null
+    if (!jwt) return
+    await fetch('/api/push', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${jwt}` },
+      body: JSON.stringify({ action: 'subscribe', sub: sub.toJSON() }),
+    })
+  } catch {
+    /* ignore — 다음 세션 확인 때 재시도 */
+  }
+}
+
+/** 로그아웃 시 — 서버 구독만 삭제(브라우저 구독은 유지해 다음 로그인 때 resync로 그 학교에 재등록).
+ *  로그아웃한 기기로 그 학교 접수가 계속 푸시되던 문제 방지. signOut 전에 호출해야 한다(JWT 필요). */
+export async function detachRemotePush(): Promise<void> {
+  if (!remotePushSupported()) return
+  try {
+    const sub = await currentSub()
+    if (!sub) return
+    const jwt = supabase ? (await supabase.auth.getSession()).data.session?.access_token : null
+    if (!jwt) return
+    await fetch('/api/push', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${jwt}` },
+      body: JSON.stringify({ action: 'unsubscribe', endpoint: sub.endpoint }),
+    })
+  } catch {
+    /* ignore */
+  }
+}
+
 /** 이 기기의 접수 푸시 구독 해제. */
 export async function unsubscribeRemotePush(): Promise<void> {
   if (!remotePushSupported()) return
