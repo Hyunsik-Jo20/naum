@@ -1,6 +1,7 @@
 // 접수 도착 폰 푸시(Web Push) — 보건교사 기기(폰/PC)에 새 접수 알림.
 //  · subscribe/unsubscribe: 보건교사(Supabase JWT)만. 구독은 push_subs(학교 스코프)에 저장.
-//  · notify: 키오스크(비로그인)가 접수 직후 호출 — 학교의 모든 구독 기기로 발송.
+//  · notify: 키오스크(비로그인)가 접수 저장 직후 호출 — 학교의 모든 구독 기기로 발송.
+//    방금(±10분) 그 학교에 저장된 방문 id(visitId)가 확인될 때만 발송한다.
 //    내용은 비식별(개수만): "새 접수 — 대기 N명". 학교당 분당 발송 상한으로 남용 완화.
 //  · pubkey: 클라이언트 구독용 VAPID 공개키 반환(클라이언트 env 불필요 — 재빌드 없이 교체 가능).
 //  env: PUSH_VAPID_PUBLIC_KEY, PUSH_VAPID_PRIVATE_KEY, (선택) PUSH_VAPID_SUBJECT,
@@ -80,13 +81,25 @@ export default async function handler(req, res) {
         if (!r.ok) return res.status(500).json({ error: 'store_failed' })
         return res.status(200).json({ ok: true })
       }
-      await sb(`push_subs?endpoint=eq.${encodeURIComponent(endpoint)}&school_id=eq.${encodeURIComponent(nurseP.sch)}`, { method: 'DELETE' })
+      // endpoint로만 삭제 — 다른 학교로 남아 있던 옛 구독(예: 테스트초로 켠 뒤 실학교 로그인)도 지워져야 한다.
+      //  endpoint는 그 기기 브라우저만 아는 값이라 보건교사 인증 + endpoint 소지로 충분.
+      await sb(`push_subs?endpoint=eq.${encodeURIComponent(endpoint)}`, { method: 'DELETE' })
       return res.status(200).json({ ok: true })
     }
 
     if (body.action === 'notify') {
       const sch = SCH_RE.test(String(body.schoolId || '')) ? String(body.schoolId) : null
       if (!sch) return res.status(400).json({ error: 'bad_school' })
+      // 실제 접수 확인 — 그 학교에 방금 저장된 방문이 있어야 발송한다. 학교 id만 아는 누구나
+      //  (또는 학교 바인딩이 어긋난 기기가) 남의 학교 보건교사 폰을 울리던 구멍 차단.
+      //  ±10분: 키오스크 기기 시계 오차 허용 + 오래 밀렸다 업로드된 접수로 한밤중 푸시 방지.
+      const vid = String(body.visitId || '')
+      if (!vid || vid.length > 128) return res.status(400).json({ error: 'bad_visit' })
+      const vr = await sb(`visits?id=eq.${encodeURIComponent(vid)}&school_id=eq.${encodeURIComponent(sch)}&select=created_at`)
+      const vrows = vr.ok ? await vr.json() : []
+      const created = Array.isArray(vrows) && vrows[0] ? Number(vrows[0].created_at) : NaN
+      if (!Number.isFinite(created)) return res.status(404).json({ error: 'visit_not_found' })
+      if (Math.abs(Date.now() - created) > 10 * 60000) return res.status(200).json({ ok: true, sent: 0, stale: true })
       if (!rateOk(sch)) return res.status(429).json({ error: 'rate_limited' })
 
       const sr = await sb(`push_subs?school_id=eq.${encodeURIComponent(sch)}&select=endpoint,sub`)

@@ -406,18 +406,12 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
         if (modeRef.current === 'supabase') {
           // 온라인이면 즉시, 오프라인이면 큐에 쌓아 재연결 시 업로드.
           const sym = symptomTileIds.map((tid) => tileById(tid)?.label).filter(Boolean).join(' · ')
-          offline.run({ type: 'createVisit', visit: v, studentId: student.id, schoolId: schoolId() })
+          // notify: 저장 성공 직후 보건교사 폰 푸시(구독 기기 push_subs, 비식별) — offline.notifyNurse.
+          offline.run({ type: 'createVisit', visit: v, studentId: student.id, schoolId: schoolId(), notify: true })
           // 알림 대상 설정(담임/학부모)에 따라 발송
           const nt = loadNotifyTargets()
-          if (nt.teacher) offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: { kind: '접수', sym, number: student.number }, ts: v.createdAt })
+          if (nt.teacher) offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: { kind: '접수', sym, number: student.number }, ts: v.createdAt, schoolId: schoolId() })
           if (nt.parent) emitParent(student.id, { kind: '접수', sym }, v.createdAt)
-          // 보건교사 폰 푸시 — 구독 기기(push_subs)로 "새 접수" 발송(비식별, 실패 무시).
-          if (offline.isOnline())
-            void fetch('/api/push', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ action: 'notify', schoolId: schoolId() }),
-            }).catch(() => {})
         } else if (modeRef.current === 'backend') void apiCreateVisit(v, student.id)
         return v
       },
@@ -439,13 +433,7 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
         touch(id)
         setStore((p) => ({ visits: [...p.visits, v], links: { ...p.links, [id]: staff.id } }))
         if (modeRef.current === 'supabase') {
-          offline.run({ type: 'createVisit', visit: v, studentId: staff.id, schoolId: schoolId() })
-          if (offline.isOnline())
-            void fetch('/api/push', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ action: 'notify', schoolId: schoolId() }),
-            }).catch(() => {})
+          offline.run({ type: 'createVisit', visit: v, studentId: staff.id, schoolId: schoolId(), notify: true })
         } else if (modeRef.current === 'backend') void apiCreateVisit(v, staff.id)
         return v
       },
@@ -520,7 +508,7 @@ export function VisitsProvider({ children }: { children: ReactNode }) {
               number: student.number,
             }
             const nt = loadNotifyTargets()
-            if (nt.teacher) offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: p, ts: treatedAt })
+            if (nt.teacher) offline.run({ type: 'emitClass', grade: student.grade, classNo: student.classNo, studentId: student.id, payload: p, ts: treatedAt, schoolId: schoolId() })
             if (nt.parent) emitParent(student.id, p, treatedAt)
           }
         } else if (modeRef.current === 'backend') void apiPatchVisit(id, full)
