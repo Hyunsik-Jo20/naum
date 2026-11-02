@@ -17,6 +17,7 @@ import QuickNoticeModal from './components/QuickNoticeModal'
 import SyncStatus from './components/SyncStatus'
 import InstallButton from './components/InstallButton'
 import AutoNoticeSettings from './components/AutoNoticeSettings'
+import UpdateNoticeModal from './components/UpdateNoticeModal'
 import HeaderWeather from './components/HeaderWeather'
 import { NoticeBell, SettingsMenu } from './components/TopbarMenus'
 import { useNotices } from './store/notices'
@@ -158,6 +159,7 @@ export default function App() {
         />
       )}
       {settingsOpen && <AutoNoticeSettings onClose={closeSettings} />}
+      {session && !isKiosk && <UpdateNoticeModal />}
 
       {toast && (
         <div className="toast">

@@ -15,6 +15,7 @@ import AiSettingsModal from './AiSettingsModal'
 import VitalsModal from './VitalsModal'
 import VitalsEditModal from './VitalsEditModal'
 import ObservePickerModal from './ObservePickerModal'
+import VisitHistoryModal, { type VisitHistoryEntry } from './VisitHistoryModal'
 import BodyMapModal from './BodyMapModal'
 import ItemPickerModal from './ItemPickerModal'
 import { loadMeds, saveMeds } from '../data/meds'
@@ -65,6 +66,24 @@ export default function TreatPanel({
     }
     return recentVisitHint(student)
   }, [student, visits, visit.id, studentOf])
+
+  // 전체 방문 기록(실제 종료 방문만) — 이름 클릭 시 증상·처치까지 모두 표시
+  const history = useMemo<VisitHistoryEntry[]>(() => {
+    if (!student) return []
+    return visits
+      .filter((v) => v.status === 'done' && studentOf(v.id)?.id === student.id)
+      .sort((a, b) => (b.treatedAt ?? b.createdAt) - (a.treatedAt ?? a.createdAt))
+      .map((v) => ({
+        id: v.id,
+        when: v.treatedAt ?? v.createdAt,
+        symptoms: (v.symptomTileIds ?? []).map((id) => tileById(id)?.label ?? id),
+        diseases: v.diseases.map((d) => d.name),
+        treatments: v.treatments ?? [],
+        outcome: v.outcome,
+        vitalsText: hasVitals(v.vitals) ? vitalsSummary(v.vitals) ?? undefined : undefined,
+      }))
+  }, [student, visits, studentOf])
+
   const phone = student ? guardianPhone(student) : null
   const teacher = student && !visit.isStaff ? teacherOf(student.grade, student.classNo) : undefined
   const staffRole = visit.isStaff && student ? staffById(student.id)?.role : undefined
@@ -92,6 +111,7 @@ export default function TreatPanel({
   const [vitals, setVitals] = useState<Vitals | null>(
     () => visit.vitals ?? vitalsFromLegacyTreatments(visit.treatments))
   const [observeOpen, setObserveOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false) // 이름 클릭 → 전체 방문 기록
   const [symOpen, setSymOpen] = useState(false) // 증상 추가·수정 패널(키오스크 오입력 정정)
   const [timeOpen, setTimeOpen] = useState(false) // 입실·퇴실 시각 수정(당일 누락분 사후 입력)
   const [timeIn, setTimeIn] = useState('')
@@ -393,7 +413,21 @@ export default function TreatPanel({
           <span className="avatar">{student?.name[0] ?? '?'}</span>
           <div>
             <div style={{ fontSize: 18, fontWeight: 600 }}>
-              {student?.name ?? '학생'}{' '}
+              {student ? (
+                <button
+                  type="button"
+                  className="name-link"
+                  title="전체 방문 기록 보기"
+                  onClick={() => setHistoryOpen(true)}
+                  style={{
+                    background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'inherit',
+                    cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3,
+                  }}
+                >
+                  {student.name}
+                  <i className="ti ti-history" style={{ fontSize: 15, marginLeft: 4, verticalAlign: -1, color: 'var(--text-2)' }} aria-hidden="true" />
+                </button>
+              ) : '학생'}{' '}
               <span style={{ fontSize: 14, color: 'var(--text-2)', fontWeight: 400 }}>
                 · {visit.isStaff
                   ? `교직원${staffRole ? ` · ${staffRole}` : ''}${student?.sex ? ` · ${student.sex}` : ''}`
@@ -783,6 +817,13 @@ export default function TreatPanel({
         )}
       </div>
       {aiSettingsOpen && <AiSettingsModal onClose={() => setAiSettingsOpen(false)} />}
+      {historyOpen && (
+        <VisitHistoryModal
+          name={student?.name ?? '학생'}
+          entries={history}
+          onClose={() => setHistoryOpen(false)}
+        />
+      )}
       {vitalsOpen && (
         <VitalsModal
           initial={vitals}

@@ -13,6 +13,7 @@ import {
   type DailyLog,
 } from '../data/dailyLog'
 import { holidayName } from '../data/holidays'
+import InfectionLogPanel from './InfectionLogPanel'
 
 const MAX = 600
 const FIELDS: { key: keyof DailyLog; label: string; hint?: string }[] = [
@@ -199,6 +200,8 @@ export default function DailyLogModal({ onClose }: { onClose: () => void }) {
             ))}
           </div>
         </div>
+
+        <InfectionLogPanel date={sel} />
 
         <div className="row" style={{ justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
           <button className="btn ghost" onClick={onClose}>닫기</button>
